@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>My Wallet Sync</title>
+    <title>My Wallet Sync - SCB Added</title>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -16,180 +16,62 @@
             --bg: #F0F2F5; 
             --kbank-bg: #E8F5E9; --kbank-text: #138B2E;
             --bay-bg: #FFF9E6; --bay-text: #B8860B;
+            --scb-bg: #F3E5F5; --scb-text: #4E2E7F; /* สีม่วงไทยพาณิชย์ */
             --cash-bg: #F5F5F5; --cash-text: #616161;
         }
 
         * { box-sizing: border-box; }
-
-        body { 
-            font-family: 'Prompt', sans-serif; 
-            background-color: var(--bg); 
-            margin: 0; 
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden; /* ป้องกันหน้าจอหลักเลื่อนทับซ้อน */
-        }
-
-.delete-btn { 
-    background: rgba(231, 76, 60, 0.1); 
-    color: var(--expense); 
-    border: none; 
-    width: 30px; 
-    height: 30px; 
-    border-radius: 50%; 
-    cursor: pointer; 
-    /* ส่วนที่แก้ไขให้ตรงกลาง */
-    display: inline-flex; 
-    align-items: center; 
-    justify-content: center; 
-    font-size: 14px; /* ปรับขนาดกากบาทให้พอดี */
-    line-height: 0;  /* ป้องกันระยะบรรทัดมาเบียด */
-    padding: 0;      /* ล้าง padding เดิมของปุ่ม */
-    transition: 0.3s;
-}
-
-.delete-btn:hover {
-    background: var(--expense);
-    color: white;
-}
-
-        .container { 
-            width: 100%; 
-            max-width: 500px; 
-            background: white; 
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
+        body { font-family: 'Prompt', sans-serif; background-color: var(--bg); margin: 0; padding: 0; display: flex; justify-content: center; height: 100vh; width: 100vw; overflow: hidden; }
+        .container { width: 100%; max-width: 500px; background: white; height: 100%; display: flex; flex-direction: column; position: relative; }
 
         /* --- หน้า Login --- */
-        #login-screen {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 40px;
-            height: 100%;
-            width: 100%;
-            background: white;
-            position: absolute;
-            z-index: 100;
-        }
-
+        #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px; height: 100%; width: 100%; background: white; position: absolute; z-index: 100; }
         .login-box { width: 100%; text-align: center; }
-        .login-box h2 { color: var(--primary); font-size: 2.5em; margin-bottom: 10px; }
-        .login-box input { 
-            width: 100%; 
-            padding: 15px; 
-            margin: 20px 0; 
-            border: 2px solid #EEE; 
-            border-radius: 12px; 
-            font-size: 1.1em;
-            text-align: center;
-        }
+        .login-box h2 { color: var(--primary); font-size: 2.5em; margin: 0; }
+        .login-box input { width: 100%; padding: 15px; margin: 20px 0; border: 2px solid #EEE; border-radius: 12px; font-size: 1.1em; text-align: center; }
 
-        /* --- หน้าหลัก App Content --- */
-        #app-content {
-            display: none; /* ซ่อนไว้ก่อน login */
-            flex-direction: column;
-            height: 100%;
-            width: 100%;
-        }
+        /* --- หน้าหลัก --- */
+        #app-content { display: none; flex-direction: column; height: 100%; width: 100%; }
+        .app-header { padding: 15px; background: white; border-bottom: 1px solid #EEE; flex-shrink: 0; }
+        .scroll-content { flex-grow: 1; overflow-y: auto; padding: 15px; padding-bottom: 80px; }
 
-        /* ส่วนหัวที่อยู่กับที่ */
-        .app-header {
-            padding: 20px;
-            background: white;
-            border-bottom: 1px solid #EEE;
-            flex-shrink: 0;
-        }
+        .total-balance { background: linear-gradient(135deg, #333, #555); color: white; padding: 15px; border-radius: 15px; text-align: center; margin-bottom: 15px; }
+        .total-balance h4 { margin: 0; opacity: 0.8; font-weight: 300; font-size: 0.8em; }
+        .total-balance h2 { margin: 5px 0 0; font-size: 1.8em; }
 
-        /* ส่วนที่เลื่อนได้ */
-        .scroll-content {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 20px;
-            padding-bottom: 100px; /* กันปุ่ม logout บัง */
-        }
+        /* ปรับเป็น 2 คอลัมน์เพื่อให้รองรับ 4 บัญชีแล้วไม่เบียด */
+        .wallet-container { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .wallet-box { padding: 8px; border-radius: 12px; text-align: center; color: white; font-size: 0.7em; }
+        .wallet-box p { margin: 3px 0 0; font-weight: 600; font-size: 1em; }
 
-        .total-balance { 
-            background: linear-gradient(135deg, #333, #555); 
-            color: white; 
-            padding: 20px; 
-            border-radius: 15px; 
-            text-align: center; 
-            margin-bottom: 15px; 
-        }
+        form { display: flex; flex-direction: column; gap: 8px; background: #F9F9F9; padding: 15px; border-radius: 15px; margin: 15px 0; }
+        input, select, button { padding: 10px; border: 1px solid #DDD; border-radius: 10px; font-family: 'Prompt'; font-size: 1em; }
+        button.btn-main { background: var(--primary); color: white; border: none; font-weight: 600; cursor: pointer; padding: 12px; }
 
-        .wallet-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-        .wallet-box { padding: 10px 5px; border-radius: 12px; text-align: center; color: white; font-size: 0.75em; }
-        .wallet-box p { margin: 5px 0 0; font-weight: 600; font-size: 1.1em; }
-
-        form { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 10px; 
-            background: #F9F9F9; 
-            padding: 15px; 
-            border-radius: 15px; 
-            margin: 20px 0;
-        }
-
-        input, select, button { 
-            padding: 12px; 
-            border: 1px solid #DDD; 
-            border-radius: 10px; 
-            font-family: 'Prompt'; 
-            font-size: 1em; 
-        }
-
-        button.btn-main { background: var(--primary); color: white; border: none; font-weight: 600; cursor: pointer; }
-
-        /* รายการประวัติ */
-        .item-card { 
-            padding: 15px; 
-            margin-bottom: 10px; 
-            border-radius: 12px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            border-left: 6px solid transparent;
-            background: white;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
+        /* ประวัติรายการ */
+        .item-card { padding: 12px; margin-bottom: 10px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border-left: 6px solid transparent; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .item-kbank { background: var(--kbank-bg); border-left-color: var(--kbank-text); }
         .item-bay { background: var(--bay-bg); border-left-color: var(--bay-text); }
+        .item-scb { background: var(--scb-bg); border-left-color: var(--scb-text); }
         .item-cash { background: var(--cash-bg); border-left-color: var(--cash-text); }
 
-        .acc-tag { font-size: 0.65em; padding: 2px 8px; border-radius: 10px; color: white; font-weight: 600; }
+        .acc-tag { font-size: 0.6em; padding: 2px 8px; border-radius: 10px; color: white; font-weight: 600; margin-top: 4px; display: inline-block; }
+        .delete-btn { background: rgba(231, 76, 60, 0.1); color: var(--expense); border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; line-height: 0; padding: 0; }
         
-        .delete-btn { background: rgba(231, 76, 60, 0.1); color: var(--expense); border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
-
-        .section-title { font-weight: 600; color: #333; margin: 20px 0 10px; border-left: 4px solid var(--primary); padding-left: 10px; }
-
-        .monthly-item { background: #fefefe; border: 1px solid #EEE; padding: 15px; border-radius: 15px; margin-bottom: 10px; }
-        .monthly-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; font-size: 0.8em; margin-top: 10px; }
+        .section-title { font-weight: 600; color: #333; margin: 20px 0 10px; border-left: 4px solid var(--primary); padding-left: 10px; font-size: 1em; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <!-- หน้า Login -->
     <div id="login-screen">
         <div class="login-box">
-            <h2>💰</h2>
-            <h2 style="margin-top:0">My Wallet</h2>
-            <p>กรุณาใส่รหัสผ่านเพื่อเข้าใช้งาน</p>
+            <h2>💰 My Wallet</h2>
             <input type="password" id="user-pass" placeholder="รหัสผ่านของคุณ" autofocus>
-            <button class="btn-main" style="width:100%; padding:15px;" onclick="login()">เข้าสู่ระบบ</button>
+            <button class="btn-main" style="width:100%" onclick="login()">เข้าสู่ระบบ</button>
         </div>
     </div>
 
-    <!-- หน้าหลัก App Content -->
     <div id="app-content">
         <div class="app-header">
             <div class="total-balance">
@@ -199,6 +81,7 @@
             <div class="wallet-container">
                 <div class="wallet-box" style="background:#138B2E">กสิกร<p id="bal-kbank">฿0</p></div>
                 <div class="wallet-box" style="background:#DAA520; color:#333">กรุงศรี<p id="bal-bay">฿0</p></div>
+                <div class="wallet-box" style="background:#4E2E7F">ไทยพาณิชย์<p id="bal-scb">฿0</p></div>
                 <div class="wallet-box" style="background:#7F8C8D">เงินสด<p id="bal-cash">฿0</p></div>
             </div>
         </div>
@@ -209,6 +92,7 @@
                     <select id="account">
                         <option value="kbank">กสิกร</option>
                         <option value="bay">กรุงศรี</option>
+                        <option value="scb">ไทยพาณิชย์</option>
                         <option value="cash">เงินสด</option>
                     </select>
                     <select id="type">
@@ -221,27 +105,23 @@
                 <input type="date" id="date" required>
                 <button type="submit" class="btn-main">บันทึกข้อมูล</button>
             </form>
-		<div style="margin-top: 20px; background: #fff; padding: 15px; border-radius: 15px; border: 1px solid #eee;">
-			<label for="month-filter" style="font-size: 0.9em; color: #666;">🔍 เลือกดูเฉพาะเดือน:</label>
-			<select id="month-filter" onchange="renderUI()" style="width: 100%; margin-top: 5px; background: #f0f7ff; border-color: #4A90E2;">
-				<option value="all">แสดงทั้งหมด (ดูย้อนหลังทั้งหมด)</option>
-				<!-- รายการเดือนจะถูกเติมโดยอัตโนมัติด้วย JavaScript -->
-			</select>
-		</div>
-		
+
+            <label style="font-size: 0.8em; color: #666;">🔍 กรองตามเดือน:</label>
+            <select id="month-filter" onchange="renderUI()" style="width: 100%; margin-bottom: 20px; background: #fff;"></select>
+
             <h3 class="section-title">📊 สรุปรายเดือน</h3>
             <div id="monthly-list"></div>
 
             <h3 class="section-title">🕒 ประวัติรายการ</h3>
             <div id="list"></div>
             
-            <button onclick="logout()" style="width:100%; background:none; border:none; color:#999; text-decoration:underline; margin-top:30px; cursor:pointer;">ออกจากระบบ</button>
+            <button onclick="logout()" style="width:100%; background:none; border:none; color:#999; text-decoration:underline; margin:30px 0; cursor:pointer;">ออกจากระบบ</button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- ใส่ FIREBASE CONFIG ของคุณตรงนี้ ---
+    // --- อย่าลืมใส่ Config Firebase ของคุณตรงนี้ ---
     const firebaseConfig = {
         apiKey: "AIzaSyBATLcMZbMuQmnIlG0edT0EPs4FCSWEets",
         authDomain: "mymoney-c730b.firebaseapp.com",
@@ -251,32 +131,24 @@
         messagingSenderId: "1086026909674",
         appId: "G-289LBX9897"
     };
-    // ------------------------------------
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     let userKey = "";
     let transactions = [];
 
-    const accNames = { kbank: "กสิกร", bay: "กรุงศรี", cash: "เงินสด" };
-    const accColors = { kbank: "#138B2E", bay: "#DAA520", cash: "#7F8C8D" };
+    const accNames = { kbank: "กสิกร", bay: "กรุงศรี", scb: "ไทยพาณิชย์", cash: "เงินสด" };
+    const accColors = { kbank: "#138B2E", bay: "#DAA520", scb: "#4E2E7F", cash: "#7F8C8D" };
 
-    function formatMoney(num) {
-        return Number(num).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
+    function formatMoney(num) { return Number(num).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function login() {
         const pass = document.getElementById('user-pass').value;
         if (!pass) return;
         userKey = btoa(pass);
-        
-        // สลับหน้าจอแบบเด็ดขาด
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('app-content').style.display = 'flex';
-        
         loadData();
     }
-
     function logout() { location.reload(); }
 
     function loadData() {
@@ -287,97 +159,88 @@
         });
     }
 
-function renderUI() {
-    const list = document.getElementById('list');
-    const mList = document.getElementById('monthly-list');
-    const monthFilter = document.getElementById('month-filter');
-    const selectedMonth = monthFilter.value; // ดึงค่าที่เลือกจาก Filter
+    function renderUI() {
+        const list = document.getElementById('list');
+        const mList = document.getElementById('monthly-list');
+        const monthFilter = document.getElementById('month-filter');
+        const selectedMonth = monthFilter.value || 'all';
 
-    list.innerHTML = ''; 
-    mList.innerHTML = '';
+        list.innerHTML = ''; mList.innerHTML = '';
 
-    let total = 0, kbank = 0, bay = 0, cash = 0;
-    const summary = {};
-    const uniqueMonths = new Set(); // สำหรับเก็บรายชื่อเดือนที่มีข้อมูลทั้งหมด
+        let total = 0, kbank = 0, bay = 0, scb = 0, cash = 0;
+        const summary = {};
+        const uniqueMonths = new Set();
 
-    // 1. คำนวณยอดรวมทั้งหมด (ยอดเงินจริงๆ ในปัจจุบัน)
-    transactions.forEach(t => {
-        const amt = parseFloat(t.amount);
-        total += amt;
-        if (t.account === 'kbank') kbank += amt;
-        if (t.account === 'bay') bay += amt;
-        if (t.account === 'cash') cash += amt;
-        uniqueMonths.add(t.date.substring(0, 7)); // เก็บปี-เดือน (เช่น 2026-04)
-    });
+        transactions.forEach(t => {
+            const amt = parseFloat(t.amount);
+            total += amt;
+            if (t.account === 'kbank') kbank += amt;
+            if (t.account === 'bay') bay += amt;
+            if (t.account === 'scb') scb += amt;
+            if (t.account === 'cash') cash += amt;
+            uniqueMonths.add(t.date.substring(0, 7));
+        });
 
-    // 2. อัปเดตตัวเลือกใน Filter (ทำเฉพาะตอนโหลดครั้งแรกหรือข้อมูลเปลี่ยน)
-    const currentFilterVal = monthFilter.value;
-    monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด (ดูย้อนหลังทั้งหมด)</option>';
-    Array.from(uniqueMonths).sort().reverse().forEach(m => {
-        const option = document.createElement('option');
-        option.value = m;
-        option.textContent = `เดือน ${m}`;
-        monthFilter.appendChild(option);
-    });
-    monthFilter.value = currentFilterVal; // รักษาค่าที่เลือกไว้
+        // อัปเดต Filter
+        const prevMonth = monthFilter.value;
+        monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
+        Array.from(uniqueMonths).sort().reverse().forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m; opt.textContent = `เดือน ${m}`;
+            monthFilter.appendChild(opt);
+        });
+        monthFilter.value = prevMonth || 'all';
 
-    // 3. กรองและแสดงผลรายการ
-    transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
+        transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
 
-    transactions.forEach(t => {
-        const amt = parseFloat(t.amount);
-        const mKey = t.date.substring(0, 7);
+        transactions.forEach(t => {
+            const amt = parseFloat(t.amount);
+            const mKey = t.date.substring(0, 7);
 
-        // เก็บข้อมูลสรุปรายเดือน (ทำก่อนการ Filter เพื่อให้สรุปยังแม่นยำ)
-        if(!summary[mKey]) summary[mKey] = {inc: 0, exp: 0};
-        if(amt > 0) summary[mKey].inc += amt;
-        else summary[mKey].exp += Math.abs(amt);
+            if(!summary[mKey]) summary[mKey] = {inc: 0, exp: 0};
+            if(amt > 0) summary[mKey].inc += amt;
+            else summary[mKey].exp += Math.abs(amt);
 
-        // ตรวจสอบเงื่อนไข Filter
-        if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
+            if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
 
-        // แสดงการ์ดรายการ
-        const card = document.createElement('div');
-        card.className = `item-card item-${t.account}`;
-        card.innerHTML = `
-            <div>
-                <strong>${t.text}</strong><br>
-                <small style="color:#888">${t.date}</small><br>
-                <span class="acc-tag" style="background:${accColors[t.account]}">${accNames[t.account]}</span>
-            </div>
-            <div style="text-align:right; display:flex; align-items:center; gap:10px;">
-                <span style="font-weight:600; color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">
-                    ${amt > 0 ? '+' : ''}${formatMoney(amt)}
-                </span>
-                <button class="delete-btn" onclick="deleteData('${t.fbKey}')">✕</button>
-            </div>
-        `;
-        list.appendChild(card);
-    });
+            const card = document.createElement('div');
+            card.className = `item-card item-${t.account}`;
+            card.innerHTML = `
+                <div>
+                    <strong>${t.text}</strong><br>
+                    <small style="color:#888">${t.date}</small><br>
+                    <span class="acc-tag" style="background:${accColors[t.account]}">${accNames[t.account]}</span>
+                </div>
+                <div style="text-align:right; display:flex; align-items:center; gap:10px;">
+                    <span style="font-weight:600; color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">${amt > 0 ? '+' : ''}${formatMoney(amt)}</span>
+                    <button class="delete-btn" onclick="deleteData('${t.fbKey}')">✕</button>
+                </div>
+            `;
+            list.appendChild(card);
+        });
 
-    // แสดงยอดเงินรวม (Actual Balance)
-    document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
-    document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
-    document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
-    document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
+        document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
+        document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
+        document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
+        document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
+        document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
 
-    // แสดงสรุปรายเดือน (กรองตามที่เลือก)
-    Object.keys(summary).sort().reverse().forEach(m => {
-        if (selectedMonth !== 'all' && m !== selectedMonth) return;
-        
-        const item = document.createElement('div');
-        item.className = 'monthly-item';
-        item.innerHTML = `
-            <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">เดือน ${m}</div>
-            <div class="monthly-grid">
-                <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
-                <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
-                <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
-            </div>
-        `;
-        mList.appendChild(item);
-    });
-}
+        Object.keys(summary).sort().reverse().forEach(m => {
+            if (selectedMonth !== 'all' && m !== selectedMonth) return;
+            const item = document.createElement('div');
+            item.className = 'monthly-item';
+            item.style = "background:#fff; border:1px solid #eee; padding:15px; border-radius:15px; margin-bottom:10px;";
+            item.innerHTML = `
+                <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">เดือน ${m}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; text-align:center; font-size:0.8em;">
+                    <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
+                    <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
+                    <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
+                </div>
+            `;
+            mList.appendChild(item);
+        });
+    }
 
     document.getElementById('form').addEventListener('submit', (e) => {
         e.preventDefault();
@@ -395,7 +258,6 @@ function renderUI() {
     function deleteData(key) {
         if(confirm('ลบรายการนี้ใช่หรือไม่?')) db.ref('users/' + userKey + '/' + key).remove();
     }
-
     document.getElementById('date').valueAsDate = new Date();
 </script>
 
