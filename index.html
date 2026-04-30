@@ -221,7 +221,14 @@
                 <input type="date" id="date" required>
                 <button type="submit" class="btn-main">บันทึกข้อมูล</button>
             </form>
-
+		<div style="margin-top: 20px; background: #fff; padding: 15px; border-radius: 15px; border: 1px solid #eee;">
+			<label for="month-filter" style="font-size: 0.9em; color: #666;">🔍 เลือกดูเฉพาะเดือน:</label>
+			<select id="month-filter" onchange="renderUI()" style="width: 100%; margin-top: 5px; background: #f0f7ff; border-color: #4A90E2;">
+				<option value="all">แสดงทั้งหมด (ดูย้อนหลังทั้งหมด)</option>
+				<!-- รายการเดือนจะถูกเติมโดยอัตโนมัติด้วย JavaScript -->
+			</select>
+		</div>
+		
             <h3 class="section-title">📊 สรุปรายเดือน</h3>
             <div id="monthly-list"></div>
 
@@ -280,65 +287,97 @@
         });
     }
 
-    function renderUI() {
-        const list = document.getElementById('list');
-        const mList = document.getElementById('monthly-list');
-        list.innerHTML = ''; mList.innerHTML = '';
+function renderUI() {
+    const list = document.getElementById('list');
+    const mList = document.getElementById('monthly-list');
+    const monthFilter = document.getElementById('month-filter');
+    const selectedMonth = monthFilter.value; // ดึงค่าที่เลือกจาก Filter
 
-        let total = 0, kbank = 0, bay = 0, cash = 0;
-        const summary = {};
+    list.innerHTML = ''; 
+    mList.innerHTML = '';
 
-        transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
+    let total = 0, kbank = 0, bay = 0, cash = 0;
+    const summary = {};
+    const uniqueMonths = new Set(); // สำหรับเก็บรายชื่อเดือนที่มีข้อมูลทั้งหมด
 
-        transactions.forEach(t => {
-            const amt = parseFloat(t.amount);
-            total += amt;
-            if (t.account === 'kbank') kbank += amt;
-            if (t.account === 'bay') bay += amt;
-            if (t.account === 'cash') cash += amt;
+    // 1. คำนวณยอดรวมทั้งหมด (ยอดเงินจริงๆ ในปัจจุบัน)
+    transactions.forEach(t => {
+        const amt = parseFloat(t.amount);
+        total += amt;
+        if (t.account === 'kbank') kbank += amt;
+        if (t.account === 'bay') bay += amt;
+        if (t.account === 'cash') cash += amt;
+        uniqueMonths.add(t.date.substring(0, 7)); // เก็บปี-เดือน (เช่น 2026-04)
+    });
 
-            const card = document.createElement('div');
-            card.className = `item-card item-${t.account}`;
-            card.innerHTML = `
-                <div>
-                    <strong>${t.text}</strong><br>
-                    <small style="color:#888">${t.date}</small><br>
-                    <span class="acc-tag" style="background:${accColors[t.account]}">${accNames[t.account]}</span>
-                </div>
-                <div style="text-align:right; display:flex; align-items:center; gap:10px;">
-                    <span style="font-weight:600; color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">
-                        ${amt > 0 ? '+' : ''}${formatMoney(amt)}
-                    </span>
-                    <button class="delete-btn" onclick="deleteData('${t.fbKey}')">✖</button>
-                </div>
-            `;
-            list.appendChild(card);
+    // 2. อัปเดตตัวเลือกใน Filter (ทำเฉพาะตอนโหลดครั้งแรกหรือข้อมูลเปลี่ยน)
+    const currentFilterVal = monthFilter.value;
+    monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด (ดูย้อนหลังทั้งหมด)</option>';
+    Array.from(uniqueMonths).sort().reverse().forEach(m => {
+        const option = document.createElement('option');
+        option.value = m;
+        option.textContent = `เดือน ${m}`;
+        monthFilter.appendChild(option);
+    });
+    monthFilter.value = currentFilterVal; // รักษาค่าที่เลือกไว้
 
-            const mKey = t.date.substring(0, 7);
-            if(!summary[mKey]) summary[mKey] = {inc: 0, exp: 0};
-            if(amt > 0) summary[mKey].inc += amt;
-            else summary[mKey].exp += Math.abs(amt);
-        });
+    // 3. กรองและแสดงผลรายการ
+    transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
 
-        document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
-        document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
-        document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
-        document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
+    transactions.forEach(t => {
+        const amt = parseFloat(t.amount);
+        const mKey = t.date.substring(0, 7);
 
-        Object.keys(summary).sort().reverse().forEach(m => {
-            const item = document.createElement('div');
-            item.className = 'monthly-item';
-            item.innerHTML = `
-                <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">เดือน ${m}</div>
-                <div class="monthly-grid">
-                    <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
-                    <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
-                    <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
-                </div>
-            `;
-            mList.appendChild(item);
-        });
-    }
+        // เก็บข้อมูลสรุปรายเดือน (ทำก่อนการ Filter เพื่อให้สรุปยังแม่นยำ)
+        if(!summary[mKey]) summary[mKey] = {inc: 0, exp: 0};
+        if(amt > 0) summary[mKey].inc += amt;
+        else summary[mKey].exp += Math.abs(amt);
+
+        // ตรวจสอบเงื่อนไข Filter
+        if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
+
+        // แสดงการ์ดรายการ
+        const card = document.createElement('div');
+        card.className = `item-card item-${t.account}`;
+        card.innerHTML = `
+            <div>
+                <strong>${t.text}</strong><br>
+                <small style="color:#888">${t.date}</small><br>
+                <span class="acc-tag" style="background:${accColors[t.account]}">${accNames[t.account]}</span>
+            </div>
+            <div style="text-align:right; display:flex; align-items:center; gap:10px;">
+                <span style="font-weight:600; color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">
+                    ${amt > 0 ? '+' : ''}${formatMoney(amt)}
+                </span>
+                <button class="delete-btn" onclick="deleteData('${t.fbKey}')">✕</button>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+
+    // แสดงยอดเงินรวม (Actual Balance)
+    document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
+    document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
+    document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
+    document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
+
+    // แสดงสรุปรายเดือน (กรองตามที่เลือก)
+    Object.keys(summary).sort().reverse().forEach(m => {
+        if (selectedMonth !== 'all' && m !== selectedMonth) return;
+        
+        const item = document.createElement('div');
+        item.className = 'monthly-item';
+        item.innerHTML = `
+            <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">เดือน ${m}</div>
+            <div class="monthly-grid">
+                <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
+                <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
+                <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
+            </div>
+        `;
+        mList.appendChild(item);
+    });
+}
 
     document.getElementById('form').addEventListener('submit', (e) => {
         e.preventDefault();
