@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บันทึกรายรับ-รายจ่าย (Sync Cloud)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
+    <!-- นำเข้า Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <style>
+        /* (Style เดิมทั้งหมดจากเวอร์ชันก่อนหน้า...) */
+        :root { --primary: #4A90E2; --income: #2ECC71; --expense: #E74C3C; --bg: #F4F7F6; }
+        body { font-family: 'Prompt', sans-serif; background-color: var(--bg); padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 500px; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .login-screen { display: flex; flex-direction: column; gap: 10px; text-align: center; }
+        .app-content { display: none; } /* ซ่อนแอปไว้จนกว่าจะ Login */
+        
+        /* สไตล์เดิมที่จำเป็น */
+        .total-balance { background: #333; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 15px; }
+        .wallet-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .wallet-box { padding: 10px; border-radius: 8px; text-align: center; color: white; font-size: 0.8em; }
+        form { display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 10px; }
+        input, select, button { padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-family: 'Prompt'; }
+        button { background: var(--primary); color: white; border: none; cursor: pointer; }
+        ul { list-style: none; padding: 0; }
+        li { background: #fff; border-right: 5px solid; padding: 12px; margin-bottom: 8px; border-radius: 8px; display: flex; justify-content: space-between; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .acc-tag { font-size: 0.6em; padding: 2px 6px; border-radius: 4px; color: white; background: #999; }
+        .monthly-item { background: #fff; border: 1px solid #eee; margin-bottom: 10px; padding: 15px; border-radius: 8px; }
+        .monthly-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- ส่วน Login -->
+    <div id="login-screen" class="login-screen">
+        <h2>ยินดีต้อนรับ</h2>
+        <p>กรุณาใส่รหัสผ่านเพื่อซิงค์ข้อมูล</p>
+        <input type="password" id="user-pass" placeholder="รหัสผ่านของคุณ">
+        <button onclick="login()">เข้าสู่ระบบ</button>
+    </div>
+
+    <!-- ส่วนเนื้อหาแอป -->
+    <div id="app-content" class="app-content">
+        <h2 style="text-align: center;">สมุดบัญชีซิงค์คลาวด์</h2>
+        <div class="total-balance">
+            <h4>เงินคงเหลือรวม</h4>
+            <h2 id="total-balance">฿0.00</h2>
+        </div>
+
+        <div class="wallet-container">
+            <div class="wallet-box" style="background:#138B2E">กสิกร<br><span id="bal-kbank">฿0</span></div>
+            <div class="wallet-box" style="background:#DAA520; color:#333">กรุงศรี<br><span id="bal-bay">฿0</span></div>
+            <div class="wallet-box" style="background:#7F8C8D">เงินสด<br><span id="bal-cash">฿0</span></div>
+        </div>
+
+        <form id="form">
+            <select id="account"><option value="kbank">กสิกร</option><option value="bay">กรุงศรี</option><option value="cash">เงินสด</option></select>
+            <select id="type"><option value="income">รายรับ (+)</option><option value="expense" selected>รายจ่าย (-)</option></select>
+            <input type="text" id="text" placeholder="รายการ" required>
+            <input type="number" id="amount" placeholder="จำนวนเงิน" required step="0.01">
+            <input type="date" id="date" required>
+            <button type="submit">บันทึกและซิงค์</button>
+        </form>
+
+        <h3 style="border-left: 5px solid var(--primary); padding-left: 10px; margin-top: 20px;">📊 สรุปรายเดือน</h3>
+        <div id="monthly-list"></div>
+
+        <h3 style="border-left: 5px solid var(--primary); padding-left: 10px; margin-top: 20px;">🕒 ประวัติ</h3>
+        <ul id="list"></ul>
+        <button onclick="logout()" style="background:#999; margin-top: 20px; width: 100%;">ออกจากระบบ</button>
+    </div>
+</div>
+
+<script>
+    // --- เริ่มการตั้งค่า FIREBASE ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyBATLcMZbMuQmnIlG0edT0EPs4FCSWEets",
+        authDomain: "mymoney-c730b.firebaseapp.com",
+        databaseURL: "https://mymoney-c730b-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "mymoney-c730b",
+        storageBucket: "mymoney-c730b.firebasestorage.app",
+        messagingSenderId: "1086026909674",
+        appId: "G-289LBX9897"
+    };
+    // ---------------------------
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    let userKey = "";
+    let transactions = [];
+
+    function login() {
+        const pass = document.getElementById('user-pass').value;
+        if (pass.length < 4) { alert("กรุณาตั้งรหัสผ่าน 4 ตัวขึ้นไป"); return; }
+        userKey = btoa(pass); // แปลงรหัสผ่านเป็น Key แบบง่าย
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-content').style.display = 'block';
+        
+        // ดึงข้อมูลจาก Firebase ทันทีที่ Login
+        loadData();
+    }
+
+    function logout() { location.reload(); }
+
+    function loadData() {
+        db.ref('users/' + userKey).on('value', (snapshot) => {
+            const data = snapshot.val();
+            transactions = data ? Object.values(data) : [];
+            // ถ้ามี id จาก Firebase ให้เก็บไว้เพื่อใช้ลบ
+            if (data) {
+                const keys = Object.keys(data);
+                transactions = transactions.map((t, index) => ({...t, fbKey: keys[index]}));
+            }
+            renderUI();
+        });
+    }
+
+    function renderUI() {
+        const list = document.getElementById('list');
+        const monthlyList = document.getElementById('monthly-list');
+        list.innerHTML = '';
+        monthlyList.innerHTML = '';
+
+        let total = 0, kbank = 0, bay = 0, cash = 0;
+        const summary = {};
+
+        // เรียงวันที่ล่าสุดขึ้นก่อน
+        transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+        transactions.forEach(t => {
+            const amt = parseFloat(t.amount);
+            total += amt;
+            if (t.account === 'kbank') kbank += amt;
+            if (t.account === 'bay') bay += amt;
+            if (t.account === 'cash') cash += amt;
+
+            // ประวัติ
+            const li = document.createElement('li');
+            li.style.borderRightColor = amt > 0 ? '#2ECC71' : '#E74C3C';
+            li.innerHTML = `
+                <div><strong>${t.text}</strong><br><small>${t.date} | ${t.account}</small></div>
+                <div>
+                    <span style="color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">${amt.toLocaleString()}</span>
+                    <button onclick="deleteData('${t.fbKey}')" style="background:none; border:none; color:#ccc; cursor:pointer; margin-left:10px;">✖</button>
+                </div>
+            `;
+            list.appendChild(li);
+
+            // รายเดือน
+            const mKey = t.date.substring(0, 7);
+            if(!summary[mKey]) summary[mKey] = {inc: 0, exp: 0};
+            if(amt > 0) summary[mKey].inc += amt;
+            else summary[mKey].exp += Math.abs(amt);
+        });
+
+        document.getElementById('total-balance').innerText = '฿' + total.toLocaleString();
+        document.getElementById('bal-kbank').innerText = '฿' + kbank.toLocaleString();
+        document.getElementById('bal-bay').innerText = '฿' + bay.toLocaleString();
+        document.getElementById('bal-cash').innerText = '฿' + cash.toLocaleString();
+
+        // Render รายเดือน
+        Object.keys(summary).sort().reverse().forEach(m => {
+            const item = document.createElement('div');
+            item.className = 'monthly-item';
+            item.innerHTML = `
+                <div style="text-align:center; font-weight:600; color:#4A90E2; margin-bottom:5px;">${m}</div>
+                <div class="monthly-stats">
+                    <div>รับ: <span style="color:#2ECC71">${summary[m].inc}</span></div>
+                    <div>จ่าย: <span style="color:#E74C3C">${summary[m].exp}</span></div>
+                    <div>เหลือ: <b>${summary[m].inc - summary[m].exp}</b></div>
+                </div>
+            `;
+            monthlyList.appendChild(item);
+        });
+    }
+
+    document.getElementById('form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const newData = {
+            account: document.getElementById('account').value,
+            text: document.getElementById('text').value,
+            amount: document.getElementById('type').value === 'expense' ? -Math.abs(document.getElementById('amount').value) : Math.abs(document.getElementById('amount').value),
+            date: document.getElementById('date').value,
+            timestamp: Date.now()
+        };
+        // ส่งข้อมูลขึ้น Firebase
+        db.ref('users/' + userKey).push(newData);
+        document.getElementById('text').value = '';
+        document.getElementById('amount').value = '';
+    });
+
+    function deleteData(fbKey) {
+        if(confirm('ลบรายการนี้?')) {
+            db.ref('users/' + userKey + '/' + fbKey).remove();
+        }
+    }
+
+    document.getElementById('date').valueAsDate = new Date();
+</script>
+
+</body>
+</html>
