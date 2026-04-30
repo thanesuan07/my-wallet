@@ -16,7 +16,7 @@
             --bg: #F0F2F5; 
             --kbank-bg: #E8F5E9; --kbank-text: #138B2E;
             --bay-bg: #FFF9E6; --bay-text: #B8860B;
-            --scb-bg: #F3E5F5; --scb-text: #4E2E7F; /* สีม่วงไทยพาณิชย์ */
+            --scb-bg: #F3E5F5; --scb-text: #4E2E7F;
             --cash-bg: #F5F5F5; --cash-text: #616161;
         }
 
@@ -24,13 +24,11 @@
         body { font-family: 'Prompt', sans-serif; background-color: var(--bg); margin: 0; padding: 0; display: flex; justify-content: center; height: 100vh; width: 100vw; overflow: hidden; }
         .container { width: 100%; max-width: 500px; background: white; height: 100%; display: flex; flex-direction: column; position: relative; }
 
-        /* --- หน้า Login --- */
         #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px; height: 100%; width: 100%; background: white; position: absolute; z-index: 100; }
         .login-box { width: 100%; text-align: center; }
         .login-box h2 { color: var(--primary); font-size: 2.5em; margin: 0; }
         .login-box input { width: 100%; padding: 15px; margin: 20px 0; border: 2px solid #EEE; border-radius: 12px; font-size: 1.1em; text-align: center; }
 
-        /* --- หน้าหลัก --- */
         #app-content { display: none; flex-direction: column; height: 100%; width: 100%; }
         .app-header { padding: 15px; background: white; border-bottom: 1px solid #EEE; flex-shrink: 0; }
         .scroll-content { flex-grow: 1; overflow-y: auto; padding: 15px; padding-bottom: 80px; }
@@ -39,7 +37,6 @@
         .total-balance h4 { margin: 0; opacity: 0.8; font-weight: 300; font-size: 0.8em; }
         .total-balance h2 { margin: 5px 0 0; font-size: 1.8em; }
 
-        /* ปรับเป็น 2 คอลัมน์เพื่อให้รองรับ 4 บัญชีแล้วไม่เบียด */
         .wallet-container { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .wallet-box { padding: 8px; border-radius: 12px; text-align: center; color: white; font-size: 0.7em; }
         .wallet-box p { margin: 3px 0 0; font-weight: 600; font-size: 1em; }
@@ -48,7 +45,6 @@
         input, select, button { padding: 10px; border: 1px solid #DDD; border-radius: 10px; font-family: 'Prompt'; font-size: 1em; }
         button.btn-main { background: var(--primary); color: white; border: none; font-weight: 600; cursor: pointer; padding: 12px; }
 
-        /* ประวัติรายการ */
         .item-card { padding: 12px; margin-bottom: 10px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border-left: 6px solid transparent; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .item-kbank { background: var(--kbank-bg); border-left-color: var(--kbank-text); }
         .item-bay { background: var(--bay-bg); border-left-color: var(--bay-text); }
@@ -121,7 +117,6 @@
 </div>
 
 <script>
-    // --- อย่าลืมใส่ Config Firebase ของคุณตรงนี้ ---
     const firebaseConfig = {
         apiKey: "AIzaSyBATLcMZbMuQmnIlG0edT0EPs4FCSWEets",
         authDomain: "mymoney-c730b.firebaseapp.com",
@@ -136,11 +131,25 @@
     const db = firebase.database();
     let userKey = "";
     let transactions = [];
+    let isFirstLoad = true;
 
     const accNames = { kbank: "กสิกร", bay: "กรุงศรี", scb: "ไทยพาณิชย์", cash: "เงินสด" };
     const accColors = { kbank: "#138B2E", bay: "#DAA520", scb: "#4E2E7F", cash: "#7F8C8D" };
+    const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
     function formatMoney(num) { return Number(num).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    
+    function formatThaiMonth(yearMonth) {
+        if (!yearMonth || yearMonth === 'all') return "แสดงทั้งหมด";
+        const [year, month] = yearMonth.split('-');
+        return `${thaiMonths[parseInt(month) - 1]} ${parseInt(year) + 543}`;
+    }
+
+    function getCurrentMonthKey() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
     function login() {
         const pass = document.getElementById('user-pass').value;
         if (!pass) return;
@@ -149,6 +158,7 @@
         document.getElementById('app-content').style.display = 'flex';
         loadData();
     }
+    
     function logout() { location.reload(); }
 
     function loadData() {
@@ -159,135 +169,97 @@
         });
     }
 
-    // 1. รายชื่อเดือนภาษาไทย
-const thaiMonths = [
-    "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
-];
+    function renderUI() {
+        const list = document.getElementById('list');
+        const mList = document.getElementById('monthly-list');
+        const monthFilter = document.getElementById('month-filter');
+        
+        // กำหนดเดือนปัจจุบันเป็นค่าเริ่มต้นเฉพาะตอนโหลดครั้งแรก
+        if (isFirstLoad) {
+            monthFilter.value = getCurrentMonthKey();
+            isFirstLoad = false;
+        }
+        
+        const selectedMonth = monthFilter.value || getCurrentMonthKey();
 
-// 2. ฟังก์ชันแปลง 2026-05 เป็น "พฤษภาคม 2569"
-function formatThaiMonth(yearMonth) {
-    if (!yearMonth || yearMonth === 'all') return "แสดงทั้งหมด";
-    const [year, month] = yearMonth.split('-');
-    const monthName = thaiMonths[parseInt(month) - 1];
-    const thaiYear = parseInt(year) + 543;
-    return `${monthName} ${thaiYear}`;
-}
+        list.innerHTML = ''; 
+        mList.innerHTML = '';
 
-// 3. ฟังก์ชันดึงเดือนปัจจุบันในรูปแบบ "YYYY-MM"
-function getCurrentMonthKey() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
-}
+        let total = 0, kbank = 0, bay = 0, scb = 0, cash = 0;
+        const summary = {};
+        const uniqueMonths = new Set();
+        uniqueMonths.add(getCurrentMonthKey()); // ต้องมีเดือนปัจจุบันเสมอ
 
-function renderUI() {
-    const list = document.getElementById('list');
-    const mList = document.getElementById('monthly-list');
-    const monthFilter = document.getElementById('month-filter');
-    
-    // --- จุดสำคัญ: ตั้งค่าเริ่มต้นเป็นเดือนปัจจุบันถ้ายังไม่มีการเลือก ---
-    const currentMonthKey = getCurrentMonthKey();
-    if (!monthFilter.value) {
-        monthFilter.value = currentMonthKey;
+        transactions.forEach(t => {
+            const amt = parseFloat(t.amount);
+            total += amt;
+            if (t.account === 'kbank') kbank += amt;
+            if (t.account === 'bay') bay += amt;
+            if (t.account === 'scb') scb += amt;
+            if (t.account === 'cash') cash += amt;
+            uniqueMonths.add(t.date.substring(0, 7));
+        });
+
+        // อัปเดต Dropdown (ชื่อเดือนไทย)
+        const currentFilterVal = monthFilter.value;
+        monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
+        Array.from(uniqueMonths).sort().reverse().forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = formatThaiMonth(m);
+            monthFilter.appendChild(opt);
+        });
+        monthFilter.value = currentFilterVal || getCurrentMonthKey();
+
+        // แสดงผลรายการ
+        transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
+        transactions.forEach(t => {
+            const amt = parseFloat(t.amount);
+            const mKey = t.date.substring(0, 7);
+
+            if(!summary[mKey]) summary[mKey] = {inc: 0, exp: 0};
+            if(amt > 0) summary[mKey].inc += amt;
+            else summary[mKey].exp += Math.abs(amt);
+
+            if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
+
+            const card = document.createElement('div');
+            card.className = `item-card item-${t.account}`;
+            card.innerHTML = `
+                <div>
+                    <strong>${t.text}</strong><br>
+                    <small style="color:#888">${t.date}</small><br>
+                    <span class="acc-tag" style="background:${accColors[t.account]}">${accNames[t.account]}</span>
+                </div>
+                <div style="text-align:right; display:flex; align-items:center; gap:10px;">
+                    <span style="font-weight:600; color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">${amt > 0 ? '+' : ''}${formatMoney(amt)}</span>
+                    <button class="delete-btn" onclick="deleteData('${t.fbKey}')">✕</button>
+                </div>`;
+            list.appendChild(card);
+        });
+
+        document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
+        document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
+        document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
+        document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
+        document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
+
+        // แสดงสรุปรายเดือน
+        Object.keys(summary).sort().reverse().forEach(m => {
+            if (selectedMonth !== 'all' && m !== selectedMonth) return;
+            const item = document.createElement('div');
+            item.style = "background:#fff; border:1px solid #eee; padding:15px; border-radius:15px; margin-bottom:10px;";
+            item.innerHTML = `
+                <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">${formatThaiMonth(m)}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; text-align:center; font-size:0.8em;">
+                    <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
+                    <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
+                    <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
+                </div>`;
+            mList.appendChild(item);
+        });
     }
-    const selectedMonth = monthFilter.value;
 
-    list.innerHTML = ''; 
-    mList.innerHTML = '';
-
-    let total = 0, kbank = 0, bay = 0, scb = 0, cash = 0;
-    const summary = {};
-    const uniqueMonths = new Set();
-    
-    // ใส่เดือนปัจจุบันลงไปในตัวเลือกเสมอ แม้จะยังไม่มีข้อมูลของเดือนนี้
-    uniqueMonths.add(currentMonthKey);
-
-    // 1. คำนวณยอดเงินรวมทั้งหมด (Actual Balance)
-    transactions.forEach(t => {
-        const amt = parseFloat(t.amount);
-        total += amt;
-        if (t.account === 'kbank') kbank += amt;
-        if (t.account === 'bay') bay += amt;
-        if (t.account === 'scb') scb += amt;
-        if (t.account === 'cash') cash += amt;
-        uniqueMonths.add(t.date.substring(0, 7));
-    });
-
-    // 2. อัปเดตรายการในช่อง Filter
-    const currentFilterVal = monthFilter.value;
-    monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
-    
-    // เรียงเดือนจากใหม่ไปเก่า
-    const sortedMonths = Array.from(uniqueMonths).sort().reverse();
-    sortedMonths.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        opt.textContent = formatThaiMonth(m);
-        monthFilter.appendChild(opt);
-    });
-    monthFilter.value = currentFilterVal;
-
-    // 3. แสดงผลรายการ (กรองตามเดือนที่เลือก)
-    transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
-
-    transactions.forEach(t => {
-        const amt = parseFloat(t.amount);
-        const mKey = t.date.substring(0, 7);
-
-        // คำนวณสรุปรายเดือน
-        if(!summary[mKey]) summary[mKey] = {inc: 0, exp: 0};
-        if(amt > 0) summary[mKey].inc += amt;
-        else summary[mKey].exp += Math.abs(amt);
-
-        // ถ้าเลือกเดือนไว้ และรายการนี้ไม่ใช่เดือนนั้น ให้ข้ามไป
-        if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
-
-        const card = document.createElement('div');
-        card.className = `item-card item-${t.account}`;
-        card.innerHTML = `
-            <div>
-                <strong>${t.text}</strong><br>
-                <small style="color:#888">${t.date}</small><br>
-                <span class="acc-tag" style="background:${accColors[t.account]}">${accNames[t.account]}</span>
-            </div>
-            <div style="text-align:right; display:flex; align-items:center; gap:10px;">
-                <span style="font-weight:600; color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">
-                    ${amt > 0 ? '+' : ''}${formatMoney(amt)}
-                </span>
-                <button class="delete-btn" onclick="deleteData('${t.fbKey}')">✕</button>
-            </div>
-        `;
-        list.appendChild(card);
-    });
-
-    // อัปเดตตัวเลขยอดเงินด้านบน
-    document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
-    document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
-    document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
-    document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
-    document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
-
-    // 4. แสดงสรุปรายเดือน (โชว์เฉพาะเดือนที่เลือก)
-    Object.keys(summary).sort().reverse().forEach(m => {
-        if (selectedMonth !== 'all' && m !== selectedMonth) return;
-
-        const item = document.createElement('div');
-        item.className = 'monthly-item';
-        item.innerHTML = `
-            <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">
-                ${formatThaiMonth(m)}
-            </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; text-align:center; font-size:0.8em;">
-                <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
-                <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
-                <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
-            </div>
-        `;
-        mList.appendChild(item);
-    });
-}
     document.getElementById('form').addEventListener('submit', (e) => {
         e.preventDefault();
         const newData = {
@@ -296,35 +268,24 @@ function renderUI() {
             amount: document.getElementById('type').value === 'expense' ? -Math.abs(document.getElementById('amount').value) : Math.abs(document.getElementById('amount').value),
             date: document.getElementById('date').value
         };
-        
         db.ref('users/' + userKey).push(newData);
-        
-        // ล้างช่องกรอกข้อมูล
         document.getElementById('text').value = '';
         document.getElementById('amount').value = '';
-        
-        // *** จุดที่เพิ่ม: ให้วันที่ดีดกลับมาเป็นปัจจุบันทันทีหลังกดบันทึก ***
-        document.getElementById('date').valueAsDate = new Date(); 
+        setToToday();
     });
 
-
-    
     function deleteData(key) {
         if(confirm('ลบรายการนี้ใช่หรือไม่?')) db.ref('users/' + userKey + '/' + key).remove();
     }
-    document.getElementById('date').valueAsDate = new Date();
-    
+
     function setToToday() {
         const now = new Date();
-        // ปรับเวลาให้ตรงกับ Timezone ประเทศไทย (UTC+7) เพื่อความแม่นยำ
         const offset = now.getTimezoneOffset() * 60000;
         const localISOTime = (new Date(now - offset)).toISOString().slice(0, 10);
         document.getElementById('date').value = localISOTime;
     }
 
     setToToday();
-    
 </script>
-
 </body>
 </html>
