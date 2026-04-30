@@ -250,11 +250,19 @@
             amount: document.getElementById('type').value === 'expense' ? -Math.abs(document.getElementById('amount').value) : Math.abs(document.getElementById('amount').value),
             date: document.getElementById('date').value
         };
+        
         db.ref('users/' + userKey).push(newData);
+        
+        // ล้างช่องกรอกข้อมูล
         document.getElementById('text').value = '';
         document.getElementById('amount').value = '';
+        
+        // *** จุดที่เพิ่ม: ให้วันที่ดีดกลับมาเป็นปัจจุบันทันทีหลังกดบันทึก ***
+        document.getElementById('date').valueAsDate = new Date(); 
     });
 
+
+    
     function deleteData(key) {
         if(confirm('ลบรายการนี้ใช่หรือไม่?')) db.ref('users/' + userKey + '/' + key).remove();
     }
