@@ -84,4 +84,456 @@
             </div>
             <div class="wallet-container">
                 <div class="wallet-box" style="background:#138B2E">กสิกร<p id="bal-kbank">฿0</p></div>
-                <div class="wallet-box" style="background:#DAA520; color:#333">กรุงศรี<p id="bal-bay">฿0</p
+                <div class="wallet-box" style="background:#DAA520; color:#333">กรุงศรี<p id="bal-bay">฿0</p></div>
+                <div class="wallet-box" style="background:#4E2E7F">ไทยพาณิชย์<p id="bal-scb">฿0</p></div>
+                <div class="wallet-box" style="background:#7F8C8D">เงินสด<p id="bal-cash">฿0</p></div>
+            </div>
+        </div>
+
+        <div class="scroll-content">
+            <div class="form-container">
+                <div class="form-tabs">
+                    <button class="tab-btn active" id="tab-normal" onclick="switchForm('normal')">บันทึกทั่วไป</button>
+                    <button class="tab-btn" id="tab-transfer" onclick="switchForm('transfer')">โอนเงิน</button>
+                </div>
+
+                <form id="form-normal">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <select id="account">
+                            <option value="kbank">กสิกร</option>
+                            <option value="bay">กรุงศรี</option>
+                            <option value="scb">ไทยพาณิชย์</option>
+                            <option value="cash">เงินสด</option>
+                        </select>
+                        <select id="type" onchange="updateCategoryOptions()">
+                            <option value="expense" selected>รายจ่าย (-)</option>
+                            <option value="income">รายรับ (+)</option>
+                        </select>
+                    </div>
+                    
+                    <select id="category" required></select>
+                    <input type="text" id="text" placeholder="ระบุรายละเอียด (ถ้ามี)...">
+                    <input type="number" id="amount" placeholder="0.00" required step="0.01">
+                    <input type="date" id="date-normal" required>
+                    <button type="submit" class="btn-main">บันทึกข้อมูล</button>
+                </form>
+
+                <form id="form-transfer" style="display:none;">
+                    <div style="display:grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center;">
+                        <select id="from-account">
+                            <option value="kbank">จากกสิกร</option>
+                            <option value="bay">จากกรุงศรี</option>
+                            <option value="scb">จากไทยพาณิชย์</option>
+                            <option value="cash">จากเงินสด</option>
+                        </select>
+                        <span style="font-size: 1.2em;">➡️</span>
+                        <select id="to-account">
+                            <option value="scb">ไปไทยพาณิชย์</option>
+                            <option value="kbank">ไปกสิกร</option>
+                            <option value="bay">ไปกรุงศรี</option>
+                            <option value="cash">ไปเงินสด</option>
+                        </select>
+                    </div>
+                    <input type="number" id="transfer-amount" placeholder="จำนวนเงินที่โอน" required step="0.01">
+                    <input type="date" id="date-transfer" required>
+                    <button type="submit" class="btn-main" style="background:#555;">ยืนยันการโอนเงิน</button>
+                </form>
+            </div>
+
+            <label style="font-size: 0.8em; color: #666;">🔍 กรองตามเดือน:</label>
+            <select id="month-filter" onchange="renderUI()" style="width: 100%; margin-bottom: 20px; background: #fff; border: 1px solid #DDD; border-radius: 8px; padding: 10px; font-family: 'Prompt';"></select>
+
+            <h3 class="section-title">📊 สรุปรายเดือน</h3>
+            <div id="monthly-list"></div>
+
+            <h3 class="section-title">🏷️ สรุปตามหมวดหมู่</h3>
+            <div id="category-summary-list"></div>
+
+            <h3 class="section-title">🕒 ประวัติรายการ</h3>
+            <div id="list"></div>
+            
+            <button onclick="logout()" style="width:100%; background:none; border:none; color:#999; text-decoration:underline; margin:30px 0; cursor:pointer;">ออกจากระบบ</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBATLcMZbMuQmnIlG0edT0EPs4FCSWEets",
+        authDomain: "mymoney-c730b.firebaseapp.com",
+        databaseURL: "https://mymoney-c730b-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "mymoney-c730b",
+        storageBucket: "mymoney-c730b.firebasestorage.app",
+        messagingSenderId: "1086026909674",
+        appId: "G-289LBX9897"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    let userKey = "";
+    let transactions = [];
+    let isFirstLoad = true;
+
+    const catData = {
+        income: [
+            { id: 'salary', name: '💰 เงินเดือน' },
+            { id: 'bonus', name: '💸 รายได้เสริม/โบนัส' },
+            { id: 'other_inc', name: '🎁 อื่นๆ' }
+        ],
+        expense: [
+            { id: 'food', name: '🍜 อาหารและเครื่องดื่ม' },
+            { id: 'travel', name: '🚆 การเดินทาง' },
+            { id: 'bills', name: '📱 บิลและค่าใช้จ่าย' },
+            { id: 'shopping', name: '🛍️ ช้อปปิ้ง/ของใช้' },
+            { id: 'it', name: '💻 ไอที/เครื่องมือ' },
+            { id: 'entertainment', name: '🎬 บันเทิง/สังสรรค์' },
+            { id: 'health', name: '🏥 สุขภาพ' },
+            { id: 'saving', name: '🏦 เงินออม/ลงทุน' },
+            { id: 'other_exp', name: '🤷 อื่นๆ' }
+        ]
+    };
+
+    const catMap = {
+        'salary': '💰 เงินเดือน', 'bonus': '💸 รายได้เสริม', 'other_inc': '🎁 อื่นๆ',
+        'food': '🍜 อาหาร', 'travel': '🚆 เดินทาง', 'bills': '📱 บิล',
+        'shopping': '🛍️ ช้อปปิ้ง', 'it': '💻 ไอที', 'entertainment': '🎬 บันเทิง',
+        'health': '🏥 สุขภาพ', 'saving': '🏦 เงินออม', 'other_exp': '🤷 อื่นๆ',
+        'transfer': '🔄 โอนเงิน'
+    };
+
+    const accNames = { kbank: "กสิกร", bay: "กรุงศรี", scb: "ไทยพาณิชย์", cash: "เงินสด" };
+    const accColors = { kbank: "#138B2E", bay: "#DAA520", scb: "#4E2E7F", cash: "#7F8C8D" };
+    const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+
+    function formatMoney(num) { return Number(num).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function formatThaiMonth(yearMonth) {
+        try {
+            if (!yearMonth || yearMonth === 'all') return "แสดงทั้งหมด";
+            const parts = yearMonth.split('-');
+            if (parts.length < 2) return yearMonth;
+            return `${thaiMonths[parseInt(parts[1]) - 1]} ${parseInt(parts[0]) + 543}`;
+        } catch(e) { return yearMonth; }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const passInput = document.getElementById('user-pass');
+        if(passInput) {
+            passInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { login(); }
+            });
+        }
+    });
+
+    function switchForm(mode) {
+        document.getElementById('form-normal').style.display = mode === 'normal' ? 'flex' : 'none';
+        document.getElementById('form-transfer').style.display = mode === 'transfer' ? 'flex' : 'none';
+        document.getElementById('tab-normal').className = mode === 'normal' ? 'tab-btn active' : 'tab-btn';
+        document.getElementById('tab-transfer').className = mode === 'transfer' ? 'tab-btn active' : 'tab-btn';
+    }
+
+    function updateCategoryOptions() {
+        const type = document.getElementById('type').value;
+        const catSelect = document.getElementById('category');
+        catSelect.innerHTML = '';
+        catData[type].forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name;
+            catSelect.appendChild(opt);
+        });
+    }
+
+    function login() {
+        const pass = document.getElementById('user-pass').value;
+        if (!pass) return;
+        userKey = btoa(pass);
+        
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-content').style.display = 'flex';
+        
+        updateCategoryOptions(); 
+        setupDefaultDate();
+        initAppListeners(); 
+        loadData();
+    }
+    
+    function initAppListeners() {
+        const formNormal = document.getElementById('form-normal');
+        formNormal.onsubmit = (e) => {
+            e.preventDefault();
+            const amt = parseFloat(document.getElementById('amount').value);
+            const textVal = document.getElementById('text').value;
+            const catVal = document.getElementById('category').value;
+            
+            const newData = {
+                account: document.getElementById('account').value,
+                category: catVal,
+                text: textVal || catMap[catVal], 
+                amount: document.getElementById('type').value === 'expense' ? -Math.abs(amt) : Math.abs(amt),
+                date: document.getElementById('date-normal').value
+            };
+            
+            db.ref('users/' + userKey).push(newData, (error) => {
+                if (error) alert("🚨 บันทึกไม่สำเร็จ: " + error.message);
+                else {
+                    document.getElementById('text').value = '';
+                    document.getElementById('amount').value = '';
+                    setupDefaultDate();
+                }
+            });
+        };
+
+        const formTransfer = document.getElementById('form-transfer');
+        formTransfer.onsubmit = (e) => {
+            e.preventDefault();
+            const from = document.getElementById('from-account').value;
+            const to = document.getElementById('to-account').value;
+            const amt = Math.abs(parseFloat(document.getElementById('transfer-amount').value));
+            const date = document.getElementById('date-transfer').value;
+
+            if (from === to) { alert('บัญชีต้นทางและปลายทางต้องต่างกัน'); return; }
+
+            db.ref('users/' + userKey).push({ account: from, category: 'transfer', text: `โอนเงินไป ${accNames[to]}`, amount: -amt, date: date });
+            db.ref('users/' + userKey).push({ account: to, category: 'transfer', text: `รับโอนจาก ${accNames[from]}`, amount: amt, date: date });
+
+            document.getElementById('transfer-amount').value = '';
+            switchForm('normal');
+            setupDefaultDate();
+        };
+    }
+    
+    function loadData() {
+        if(!userKey) return;
+        
+        db.ref('users/' + userKey).on('value', (snapshot) => {
+            const data = snapshot.val();
+            transactions = [];
+            
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const item = data[key];
+                    if (item && typeof item === 'object') {
+                        let defaultCat = item.amount > 0 ? 'other_inc' : 'other_exp';
+                        
+                        transactions.push({
+                            fbKey: key,
+                            account: item.account || 'cash',
+                            category: item.category || defaultCat,
+                            text: item.text || 'ไม่ระบุรายการ',
+                            amount: item.amount, 
+                            date: item.date || '' 
+                        });
+                    }
+                });
+            }
+            updateMonthFilterOptions();
+            renderUI();
+        }, (error) => {
+            alert("🚨 ไม่สามารถดึงข้อมูลได้: " + error.message);
+        });
+    }
+
+    function updateMonthFilterOptions() {
+        const monthFilter = document.getElementById('month-filter');
+        if (!monthFilter) return;
+        
+        const currentSelection = monthFilter.value;
+        const uniqueMonths = new Set();
+        
+        transactions.forEach(t => {
+            if (t.date && typeof t.date === 'string' && t.date.length >= 7) {
+                uniqueMonths.add(t.date.substring(0, 7));
+            }
+        });
+
+        const sortedMonths = Array.from(uniqueMonths).sort().reverse();
+        monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
+        
+        sortedMonths.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m; 
+            opt.textContent = formatThaiMonth(m);
+            monthFilter.appendChild(opt);
+        });
+
+        if (isFirstLoad) {
+            monthFilter.value = 'all'; 
+            isFirstLoad = false;
+        } else if (currentSelection) {
+            monthFilter.value = currentSelection;
+        }
+    }
+
+    function renderUI() {
+        const list = document.getElementById('list');
+        const mList = document.getElementById('monthly-list');
+        const catSummaryList = document.getElementById('category-summary-list');
+        const monthFilter = document.getElementById('month-filter');
+        
+        if (!list || !mList || !catSummaryList || !monthFilter) return;
+        
+        const selectedMonth = monthFilter.value || 'all';
+
+        list.innerHTML = ''; 
+        mList.innerHTML = '';
+        catSummaryList.innerHTML = '';
+        
+        let total = 0, kbank = 0, bay = 0, scb = 0, cash = 0;
+        const summary = {};
+        
+        // ตัวแปรสำหรับเก็บยอดรวมแยกตามหมวดหมู่
+        const catSummary = { income: {}, expense: {} };
+
+        transactions.forEach(t => {
+            const amt = parseFloat(t.amount) || 0;
+            total += amt;
+            if (t.account === 'kbank') kbank += amt;
+            if (t.account === 'bay') bay += amt;
+            if (t.account === 'scb') scb += amt;
+            if (t.account === 'cash') cash += amt;
+
+            let mKey = "unknown";
+            if (t.date && typeof t.date === 'string' && t.date.length >= 7) {
+                mKey = t.date.substring(0, 7);
+            }
+
+            if (mKey !== "unknown") {
+                if (!summary[mKey]) summary[mKey] = { inc: 0, exp: 0 };
+                if (amt > 0) summary[mKey].inc += amt;
+                else summary[mKey].exp += Math.abs(amt);
+            }
+
+            // คำนวณสรุปหมวดหมู่เฉพาะข้อมูลของเดือนที่ถูกเลือกอยู่ (หรือถ้าเลือก "ทั้งหมด" ก็คำนวณทั้งหมด)
+            if (selectedMonth === 'all' || mKey === selectedMonth) {
+                // ข้ามรายการประเภท 'transfer' (โอนเงินระหว่างบัญชีตัวเอง) เพื่อไม่ให้ยอดสรุปซ้ำซ้อน
+                if (t.category !== 'transfer') {
+                    const absAmt = Math.abs(amt);
+                    if (amt > 0) {
+                        if (!catSummary.income[t.category]) catSummary.income[t.category] = 0;
+                        catSummary.income[t.category] += absAmt;
+                    } else {
+                        if (!catSummary.expense[t.category]) catSummary.expense[t.category] = 0;
+                        catSummary.expense[t.category] += absAmt;
+                    }
+                }
+            }
+        });
+
+        document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
+        document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
+        document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
+        document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
+        document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
+
+        // -- วาดประวัติรายการ --
+        const sortedTransactions = [...transactions].sort((a, b) => {
+            const dateA = a.date ? new Date(a.date) : new Date(0);
+            const dateB = b.date ? new Date(b.date) : new Date(0);
+            return dateB - dateA;
+        });
+        
+        sortedTransactions.forEach(t => {
+            let mKey = "unknown";
+            if (t.date && typeof t.date === 'string' && t.date.length >= 7) {
+                mKey = t.date.substring(0, 7);
+            }
+            
+            if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
+
+            const amt = parseFloat(t.amount) || 0;
+            const card = document.createElement('div');
+            card.className = `item-card item-${t.account}`;
+            
+            card.innerHTML = `
+                <div>
+                    <strong>${t.text}</strong><br>
+                    <small style="color:#888">${t.date || 'ไม่มีระบุวันที่'}</small><br>
+                    <div class="tag-container">
+                        <span class="acc-tag" style="background:${accColors[t.account] || '#7F8C8D'}">${accNames[t.account] || 'เงินสด'}</span>
+                        <span class="cat-tag">${catMap[t.category] || '🤷 อื่นๆ'}</span>
+                    </div>
+                </div>
+                <div style="text-align:right; display:flex; align-items:center; gap:10px;">
+                    <span style="font-weight:600; color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">${amt > 0 ? '+' : ''}${formatMoney(amt)}</span>
+                    <button class="delete-btn" onclick="deleteData('${t.fbKey}')">✕</button>
+                </div>`;
+            list.appendChild(card);
+        });
+
+        // -- วาดกล่องสรุปรายเดือน --
+        Object.keys(summary).sort().reverse().forEach(m => {
+            if (selectedMonth !== 'all' && m !== selectedMonth) return;
+            
+            const item = document.createElement('div');
+            item.style = "background:#fff; border:1px solid #eee; padding:15px; border-radius:15px; margin-bottom:10px;";
+            item.innerHTML = `
+                <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">${formatThaiMonth(m)}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; text-align:center; font-size:0.8em;">
+                    <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
+                    <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
+                    <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
+                </div>`;
+            mList.appendChild(item);
+        });
+
+        // -- วาดกล่องสรุปตามหมวดหมู่ (แยกรายรับ-รายจ่าย เรียงตามยอด) --
+        let catHtml = `<div style="background:#fff; border:1px solid #eee; padding:15px; border-radius:15px; margin-bottom:10px;">`;
+        
+        // หมวดหมู่รายจ่าย
+        catHtml += `<div style="margin-bottom: 15px;"><strong>รายจ่ายแยกหมวด:</strong><br>`;
+        const expKeys = Object.keys(catSummary.expense).sort((a,b) => catSummary.expense[b] - catSummary.expense[a]);
+        if (expKeys.length > 0) {
+            expKeys.forEach(c => {
+                catHtml += `<div class="cat-summary-row">
+                    <span>${catMap[c] || '🤷 อื่นๆ'}</span>
+                    <span style="color:#E74C3C">${formatMoney(catSummary.expense[c])}</span>
+                </div>`;
+            });
+        } else {
+            catHtml += `<small style="color:#999">ยังไม่มีข้อมูลรายจ่าย</small>`;
+        }
+        catHtml += `</div>`;
+
+        // หมวดหมู่รายรับ
+        catHtml += `<div><strong>รายรับแยกหมวด:</strong><br>`;
+        const incKeys = Object.keys(catSummary.income).sort((a,b) => catSummary.income[b] - catSummary.income[a]);
+        if (incKeys.length > 0) {
+            incKeys.forEach(c => {
+                catHtml += `<div class="cat-summary-row">
+                    <span>${catMap[c] || '🤷 อื่นๆ'}</span>
+                    <span style="color:#2ECC71">${formatMoney(catSummary.income[c])}</span>
+                </div>`;
+            });
+        } else {
+            catHtml += `<small style="color:#999">ยังไม่มีข้อมูลรายรับ</small>`;
+        }
+        catHtml += `</div></div>`;
+        
+        catSummaryList.innerHTML = catHtml;
+    }
+
+    function deleteData(key) { 
+        if(confirm('ลบรายการนี้ใช่หรือไม่?')) {
+            db.ref('users/' + userKey + '/' + key).remove(); 
+        }
+    }
+    
+    function logout() { location.reload(); }
+
+    function setupDefaultDate() {
+        try {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            const localDate = `${y}-${m}-${d}`;
+            
+            const dNormal = document.getElementById('date-normal');
+            const dTransfer = document.getElementById('date-transfer');
+            if(dNormal) dNormal.value = localDate;
+            if(dTransfer) dTransfer.value = localDate;
+        } catch(e) {}
+    }
+</script>
+</body>
+</html>
