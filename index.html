@@ -175,9 +175,7 @@
             const parts = yearMonth.split('-');
             if (parts.length < 2) return yearMonth;
             return `${thaiMonths[parseInt(parts[1]) - 1]} ${parseInt(parts[0]) + 543}`;
-        } catch(e) {
-            return yearMonth;
-        }
+        } catch(e) { return yearMonth; }
     }
     
     function getCurrentMonthKey() {
@@ -185,6 +183,7 @@
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     }
 
+    // แก้ไขจุดสำคัญ: ดักจับการกด Enter หน้าจอล็อกอินแบบปลอดภัยร้อยเปอร์เซ็นต์
     document.addEventListener('DOMContentLoaded', () => {
         const passInput = document.getElementById('user-pass');
         if(passInput) {
@@ -202,21 +201,71 @@
     }
 
     function login() {
-        try {
-            const pass = document.getElementById('user-pass').value;
-            if (!pass) return;
-            userKey = btoa(pass);
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('app-content').style.display = 'flex';
-            
-            setToToday();
-            loadData();
-        } catch (err) {
-            alert("เกิดข้อผิดพลาดในการเข้าสู่ระบบ");
+        const pass = document.getElementById('user-pass').value;
+        if (!pass) return;
+        userKey = btoa(pass);
+        
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-content').style.display = 'flex';
+        
+        // รันฟังก์ชันย่อยหลังจากหน้าต่างแอปเปิดขึ้นมาเสร็จเรียบร้อยแล้วเท่านั้น
+        initAppListeners();
+        setToToday();
+        loadData();
+    }
+    
+    // แก้ไขจุดสำคัญ: ย้ายการลงทะเบียนปุ่มกดบันทึกข้อมูลมาไว้ตรงนี้ เพื่อป้องกันสคริปต์พังตอนเปิดหน้าแรก
+    function initAppListeners() {
+        const formNormal = document.getElementById('form-normal');
+        if (formNormal) {
+            formNormal.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const amt = parseFloat(document.getElementById('amount').value);
+                const newData = {
+                    account: document.getElementById('account').value,
+                    text: document.getElementById('text').value,
+                    amount: document.getElementById('type').value === 'expense' ? -Math.abs(amt) : Math.abs(amt),
+                    date: document.getElementById('date-normal').value
+                };
+                db.ref('users/' + userKey).push(newData);
+                document.getElementById('text').value = '';
+                document.getElementById('amount').value = '';
+                setToToday();
+            });
+        }
+
+        const formTransfer = document.getElementById('form-transfer');
+        if (formTransfer) {
+            formTransfer.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const from = document.getElementById('from-account').value;
+                const to = document.getElementById('to-account').value;
+                const amt = Math.abs(parseFloat(document.getElementById('transfer-amount').value));
+                const date = document.getElementById('date-transfer').value;
+
+                if (from === to) { alert('บัญชีต้นทางและปลายทางต้องต่างกัน'); return; }
+
+                db.ref('users/' + userKey).push({
+                    account: from,
+                    text: `🔄 โอนเงินไป ${accNames[to]}`,
+                    amount: -amt,
+                    date: date
+                });
+
+                db.ref('users/' + userKey).push({
+                    account: to,
+                    text: `🔄 รับโอนจาก ${accNames[from]}`,
+                    amount: amt,
+                    date: date
+                });
+
+                document.getElementById('transfer-amount').value = '';
+                switchForm('normal');
+                setToToday();
+            });
         }
     }
     
-    // 🛠️ แก้ไข: ปรับระบบให้อ่านฟิลด์เรียงตัวตามรูปถ่ายแบบปลอดภัยสูงสุด 100% ไม่พึ่งพิงฟิลด์อื่น
     function loadData() {
         if(!userKey) return;
         db.ref('users/' + userKey).on('value', (snapshot) => {
@@ -227,10 +276,146 @@
                 Object.keys(data).forEach(key => {
                     const item = data[key];
                     if (item) {
-                        // ดึงเฉพาะฟิลด์ที่มีจริงในรูปภาพอย่างปลอดภัย
                         transactions.push({
                             fbKey: key,
                             account: item.account || 'cash',
                             text: item.text || 'ไม่ระบุรายการ',
                             amount: parseFloat(item.amount) || 0,
-                            date: item.date ||
+                            date: item.date || getCurrentMonthKey() + '-01'
+                        });
+                    }
+                });
+            }
+            
+            updateMonthFilterOptions();
+            renderUI();
+        });
+    }
+
+    function updateMonthFilterOptions() {
+        const monthFilter = document.getElementById('month-filter');
+        if (!monthFilter) return;
+        
+        const currentSelection = monthFilter.value;
+        const uniqueMonths = new Set();
+        uniqueMonths.add(getCurrentMonthKey());
+        
+        transactions.forEach(t => {
+            if (t.date && t.date.length >= 7) {
+                uniqueMonths.add(t.date.substring(0, 7));
+            }
+        });
+
+        const sortedMonths = Array.from(uniqueMonths).sort().reverse();
+        monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
+        sortedMonths.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m; 
+            opt.textContent = formatThaiMonth(m);
+            monthFilter.appendChild(opt);
+        });
+
+        if (isFirstLoad) {
+            monthFilter.value = 'all'; // บังคับให้แสดงข้อมูลทั้งหมดตั้งแต่แรกล็อกอิน
+            isFirstLoad = false;
+        } else if (currentSelection) {
+            monthFilter.value = currentSelection;
+        }
+    }
+
+    function renderUI() {
+        const list = document.getElementById('list');
+        const mList = document.getElementById('monthly-list');
+        const monthFilter = document.getElementById('month-filter');
+        
+        if (!list || !mList || !monthFilter) return;
+        
+        const selectedMonth = monthFilter.value || 'all';
+
+        list.innerHTML = ''; 
+        mList.innerHTML = '';
+        
+        let total = 0, kbank = 0, bay = 0, scb = 0, cash = 0;
+        const summary = {};
+
+        transactions.forEach(t => {
+            const amt = parseFloat(t.amount) || 0;
+            total += amt;
+            if (t.account === 'kbank') kbank += amt;
+            if (t.account === 'bay') bay += amt;
+            if (t.account === 'scb') scb += amt;
+            if (t.account === 'cash') cash += amt;
+
+            if (t.date && t.date.length >= 7) {
+                const mKey = t.date.substring(0, 7);
+                if (!summary[mKey]) summary[mKey] = { inc: 0, exp: 0 };
+                if (amt > 0) summary[mKey].inc += amt;
+                else summary[mKey].exp += Math.abs(amt);
+            }
+        });
+
+        document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
+        document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
+        document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
+        document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
+        document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
+
+        const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        sortedTransactions.forEach(t => {
+            if (!t.date || t.date.length < 7) return;
+            const mKey = t.date.substring(0, 7);
+            if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
+
+            const amt = parseFloat(t.amount) || 0;
+            const card = document.createElement('div');
+            card.className = `item-card item-${t.account}`;
+            card.innerHTML = `
+                <div>
+                    <strong>${t.text}</strong><br>
+                    <small style="color:#888">${t.date}</small><br>
+                    <span class="acc-tag" style="background:${accColors[t.account] || '#7F8C8D'}">${accNames[t.account] || 'เงินสด'}</span>
+                </div>
+                <div style="text-align:right; display:flex; align-items:center; gap:10px;">
+                    <span style="font-weight:600; color:${amt > 0 ? '#2ECC71' : '#E74C3C'}">${amt > 0 ? '+' : ''}${formatMoney(amt)}</span>
+                    <button class="delete-btn" onclick="deleteData('${t.fbKey}')">✕</button>
+                </div>`;
+            list.appendChild(card);
+        });
+
+        Object.keys(summary).sort().reverse().forEach(m => {
+            if (selectedMonth !== 'all' && m !== selectedMonth) return;
+            const item = document.createElement('div');
+            item.style = "background:#fff; border:1px solid #eee; padding:15px; border-radius:15px; margin-bottom:10px;";
+            item.innerHTML = `
+                <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">${formatThaiMonth(m)}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; text-align:center; font-size:0.8em;">
+                    <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
+                    <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
+                    <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
+                </div>`;
+            mList.appendChild(item);
+        });
+    }
+
+    function deleteData(key) { 
+        if(confirm('ลบรายการนี้ใช่หรือไม่?\n(คำแนะนำ: หากเป็นรายการโอนเงิน ต้องตามลบอีกขาหนึ่งด้วยตนเอง ยอดเงินจึงจะกลับมาเท่าเดิมครับ)')) {
+            db.ref('users/' + userKey + '/' + key).remove(); 
+        }
+    }
+    
+    function logout() { location.reload(); }
+
+    function setToToday() {
+        try {
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(now - offset)).toISOString().slice(0, 10);
+            document.querySelectorAll('.date-input').forEach(el => {
+                if(el) el.value = localISOTime;
+            });
+        } catch(e) {}
+    }
+</script>
+</body>
+</html>
