@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>My Wallet</title>
+    <title> - My Wallet - </title>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -131,13 +131,9 @@
                 </form>
             </div>
 
-            <label style="font-size: 0.8em; color: #666;">🔍 กรองตามเดือน:</label>
-            <select id="month-filter" onchange="renderUI()" style="width: 100%; margin-bottom: 20px; background: #fff;"></select>
+            <select id="month-filter" onchange="renderUI()" style="display: none;"></select>
 
-            <h3 class="section-title">📊 สรุปรายเดือน</h3>
-            <div id="monthly-list"></div>
-
-            <h3 class="section-title">🕒 ประวัติรายการ</h3>
+            <h3 class="section-title">🕒 ประวัติรายการทั้งหมด</h3>
             <div id="list"></div>
             
             <button onclick="logout()" style="width:100%; background:none; border:none; color:#999; text-decoration:underline; margin:30px 0; cursor:pointer;">ออกจากระบบ</button>
@@ -161,83 +157,13 @@
     const db = firebase.database();
     let userKey = "";
     let transactions = [];
-    let isFirstLoad = true;
 
     const accNames = { kbank: "กสิกร", bay: "กรุงศรี", scb: "ไทยพาณิชย์", cash: "เงินสด" };
     const accColors = { kbank: "#138B2E", bay: "#DAA520", scb: "#4E2E7F", cash: "#7F8C8D" };
-    const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
     function formatMoney(num) { return Number(num).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-    
-    function formatThaiMonth(yearMonth) {
-        try {
-            if (!yearMonth || yearMonth === 'all') return "แสดงทั้งหมด";
-            const parts = yearMonth.split('-');
-            if (parts.length < 2) return yearMonth;
-            return `${thaiMonths[parseInt(parts[1]) - 1]} ${parseInt(parts[0]) + 543}`;
-        } catch(e) { return yearMonth; }
-    }
-    
-    function getCurrentMonthKey() {
-        const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    }
 
-    // ลงทะเบียนการกดปุ่มบันทึกข้อมูลแบบปลอดภัยร้อยเปอร์เซ็นต์
-    document.addEventListener('DOMContentLoaded', () => {
-        const passInput = document.getElementById('user-pass');
-        if(passInput) {
-            passInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') { login(); }
-            });
-        }
-
-        const formNormal = document.getElementById('form-normal');
-        if (formNormal) {
-            formNormal.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const amt = parseFloat(document.getElementById('amount').value);
-                const newData = {
-                    account: document.getElementById('account').value,
-                    text: document.getElementById('text').value,
-                    amount: document.getElementById('type').value === 'expense' ? -Math.abs(amt) : Math.abs(amt),
-                    date: document.getElementById('date-normal').value
-                };
-                db.ref('users/' + userKey).push(newData);
-                document.getElementById('text').value = '';
-                document.getElementById('amount').value = '';
-                setToToday();
-            });
-        }
-
-        const formTransfer = document.getElementById('form-transfer');
-        if (formTransfer) {
-            formTransfer.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const from = document.getElementById('from-account').value;
-                const to = document.getElementById('to-account').value;
-                const amt = Math.abs(parseFloat(document.getElementById('transfer-amount').value));
-                const date = document.getElementById('date-transfer').value;
-
-                if (from === to) { alert('บัญชีต้นทางและปลายทางต้องต่างกัน'); return; }
-
-                db.ref('users/' + userKey).push({ account: from, text: `🔄 โอนเงินไป ${accNames[to]}`, amount: -amt, date: date });
-                db.ref('users/' + userKey).push({ account: to, text: `🔄 รับโอนจาก ${accNames[from]}`, amount: amt, date: date });
-
-                document.getElementById('transfer-amount').value = '';
-                switchForm('normal');
-                setToToday();
-            });
-        }
-    });
-
-    function switchForm(mode) {
-        document.getElementById('form-normal').style.display = mode === 'normal' ? 'flex' : 'none';
-        document.getElementById('form-transfer').style.display = mode === 'transfer' ? 'flex' : 'none';
-        document.getElementById('tab-normal').className = mode === 'normal' ? 'tab-btn active' : 'tab-btn';
-        document.getElementById('tab-transfer').className = mode === 'transfer' ? 'tab-btn active' : 'tab-btn';
-    }
-
+    // ฟังก์ชันล็อกอินแบบพื้นฐานที่สุด ไม่ผูกมัดกับตัวแปรอื่น
     function login() {
         const pass = document.getElementById('user-pass').value;
         if (!pass) return;
@@ -249,100 +175,58 @@
         setToToday();
         loadData();
     }
-    
-    // 🛠️ แก้ไขจุดตาย: เปลี่ยนเป็นระบบแกะข้อมูลแบบ Try-Catch เพื่อความเสถียรสูงสุด ไม่ล่มแน่นอน
+
+    // ดักจับปุ่ม Enter ตอนพิมพ์รหัสผ่าน
+    document.addEventListener('DOMContentLoaded', () => {
+        const passInput = document.getElementById('user-pass');
+        if(passInput) {
+            passInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { login(); }
+            });
+        }
+    });
+
+    function switchForm(mode) {
+        document.getElementById('form-normal').style.display = mode === 'normal' ? 'flex' : 'none';
+        document.getElementById('form-transfer').style.display = mode === 'transfer' ? 'flex' : 'none';
+        document.getElementById('tab-normal').className = mode === 'normal' ? 'tab-btn active' : 'tab-btn';
+        document.getElementById('tab-transfer').className = mode === 'transfer' ? 'tab-btn active' : 'tab-btn';
+    }
+
+    // 🛠️ แก้ไขต้นตอ: ฟังก์ชันดึงข้อมูลแบบ "ตรงไปตรงมาที่สุด" อ่านคีย์ตรงๆ จากหน้ารูปภาพ Firebase ของคุณ
     function loadData() {
         if(!userKey) return;
         db.ref('users/' + userKey).on('value', (snapshot) => {
-            const rawData = snapshot.val();
+            const data = snapshot.val();
             transactions = [];
             
-            if (rawData) {
-                let targetData = rawData;
-                
-                // ตรวจเช็คแบบปลอดภัยสูงสุด ไม่ใช้การเช็คคุณสมบัติแบบดิ่งลึกตรงๆ
-                try {
-                    if (rawData && typeof rawData === 'object' && rawData.hasOwnProperty('users')) {
-                        if (rawData.users && typeof rawData.users === 'object') {
-                            // สแกนดึงข้อมูลชั้นในกรณีเกิดการซ้อนของโฟลเดอร์แบบในรูป
-                            const keys = Object.keys(rawData.users);
-                            if (keys.length > 0 && rawData.users[keys[0]]) {
-                                targetData = rawData.users[keys[0]];
-                            }
-                        }
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const item = data[key];
+                    // ดึงข้อมูล 4 ตัวหลักออกมาตรงๆ ไม่สนใจว่าจะแอบซ้อนหรือชนิดข้อมูลเป็นอย่างไร
+                    if (item && typeof item === 'object') {
+                        transactions.push({
+                            fbKey: key,
+                            account: item.account || 'cash',
+                            text: item.text || 'ไม่ระบุรายการ',
+                            amount: item.amount, // ดึงค่าตัวเลขตรงๆ จาก Firebase ไม่แปลงซ้ำ
+                            date: item.date || '2026-05-01'
+                        });
                     }
-                } catch (err) {
-                    targetData = rawData; // ถ้าติดขัด ให้ใช้ค่าเริ่มต้นทันทีเพื่อไม่ให้ระบบล่ม
-                }
-
-                // แตกแจงข้อมูลลงรายการประวัติอย่างปลอดภัย
-                if (targetData && typeof targetData === 'object') {
-                    Object.keys(targetData).forEach(key => {
-                        const item = targetData[key];
-                        if (item && typeof item === 'object') {
-                            transactions.push({
-                                fbKey: key,
-                                account: item.account || 'cash',
-                                text: item.text || 'ไม่ระบุรายการ',
-                                amount: parseFloat(item.amount) || 0,
-                                date: item.date || getCurrentMonthKey() + '-01'
-                            });
-                        }
-                    });
-                }
+                });
             }
-            
-            updateMonthFilterOptions();
             renderUI();
         });
     }
 
-    function updateMonthFilterOptions() {
-        const monthFilter = document.getElementById('month-filter');
-        if (!monthFilter) return;
-        
-        const currentSelection = monthFilter.value;
-        const uniqueMonths = new Set();
-        uniqueMonths.add(getCurrentMonthKey());
-        
-        transactions.forEach(t => {
-            if (t.date && t.date.length >= 7) {
-                uniqueMonths.add(t.date.substring(0, 7));
-            }
-        });
-
-        const sortedMonths = Array.from(uniqueMonths).sort().reverse();
-        monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
-        sortedMonths.forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m; 
-            opt.textContent = formatThaiMonth(m);
-            monthFilter.appendChild(opt);
-        });
-
-        if (isFirstLoad) {
-            monthFilter.value = 'all'; 
-            isFirstLoad = false;
-        } else if (currentSelection) {
-            monthFilter.value = currentSelection;
-        }
-    }
-
     function renderUI() {
         const list = document.getElementById('list');
-        const mList = document.getElementById('monthly-list');
-        const monthFilter = document.getElementById('month-filter');
-        
-        if (!list || !mList || !monthFilter) return;
-        
-        const selectedMonth = monthFilter.value || 'all';
-
+        if (!list) return;
         list.innerHTML = ''; 
-        mList.innerHTML = '';
         
         let total = 0, kbank = 0, bay = 0, scb = 0, cash = 0;
-        const summary = {};
 
+        // คำนวณยอดเงินรวม
         transactions.forEach(t => {
             const amt = parseFloat(t.amount) || 0;
             total += amt;
@@ -350,13 +234,6 @@
             if (t.account === 'bay') bay += amt;
             if (t.account === 'scb') scb += amt;
             if (t.account === 'cash') cash += amt;
-
-            if (t.date && t.date.length >= 7) {
-                const mKey = t.date.substring(0, 7);
-                if (!summary[mKey]) summary[mKey] = { inc: 0, exp: 0 };
-                if (amt > 0) summary[mKey].inc += amt;
-                else summary[mKey].exp += Math.abs(amt);
-            }
         });
 
         document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
@@ -365,13 +242,11 @@
         document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
         document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
 
+        // เรียงลำดับตามวันที่จากใหม่ไปเก่า
         const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
         
+        // วาดการ์ดประวัติขึ้นหน้าจอทั้งหมดแบบไม่มีการกรองเดือนมาบล็อกไว้
         sortedTransactions.forEach(t => {
-            if (!t.date || t.date.length < 7) return;
-            const mKey = t.date.substring(0, 7);
-            if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
-
             const amt = parseFloat(t.amount) || 0;
             const card = document.createElement('div');
             card.className = `item-card item-${t.account}`;
@@ -387,37 +262,44 @@
                 </div>`;
             list.appendChild(card);
         });
-
-        Object.keys(summary).sort().reverse().forEach(m => {
-            if (selectedMonth !== 'all' && m !== selectedMonth) return;
-            const item = document.createElement('div');
-            item.style = "background:#fff; border:1px solid #eee; padding:15px; border-radius:15px; margin-bottom:10px;";
-            item.innerHTML = `
-                <div style="text-align:center; font-weight:600; color:var(--primary); margin-bottom:5px;">${formatThaiMonth(m)}</div>
-                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; text-align:center; font-size:0.8em;">
-                    <div>รับ<br><b style="color:#2ECC71">${formatMoney(summary[m].inc)}</b></div>
-                    <div>จ่าย<br><b style="color:#E74C3C">${formatMoney(summary[m].exp)}</b></div>
-                    <div>เหลือ<br><b>${formatMoney(summary[m].inc - summary[m].exp)}</b></div>
-                </div>`;
-            mList.appendChild(item);
-        });
     }
+
+    // ฟังก์ชันส่งข้อมูลเข้า Firebase ปกติ
+    document.getElementById('form-normal').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const amt = parseFloat(document.getElementById('amount').value);
+        const newData = {
+            account: document.getElementById('account').value,
+            text: document.getElementById('text').value,
+            amount: document.getElementById('type').value === 'expense' ? -Math.abs(amt) : Math.abs(amt),
+            date: document.getElementById('date-normal').value
+        };
+        db.ref('users/' + userKey).push(newData);
+        document.getElementById('text').value = '';
+        document.getElementById('amount').value = '';
+        setToToday();
+    });
+
+    document.getElementById('form-transfer').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const from = document.getElementById('from-account').value;
+        const to = document.getElementById('to-account').value;
+        const amt = Math.abs(parseFloat(document.getElementById('transfer-amount').value));
+        const date = document.getElementById('date-transfer').value;
+
+        if (from === to) { alert('บัญชีต้นทางและปลายทางต้องต่างกัน'); return; }
+
+        db.ref('users/' + userKey).push({ account: from, text: `🔄 โอนเงินไป ${accNames[to]}`, amount: -amt, date: date });
+        db.ref('users/' + userKey).push({ account: to, text: `🔄 รับโอนจาก ${accNames[from]}`, amount: amt, date: date });
+
+        document.getElementById('transfer-amount').value = '';
+        switchForm('normal');
+        setToToday();
+    });
 
     function deleteData(key) { 
         if(confirm('ลบรายการนี้ใช่หรือไม่?')) {
-            db.ref('users/' + userKey).once('value', (snapshot) => {
-                const data = snapshot.val();
-                try {
-                    if (data && data.users) {
-                        const keys = Object.keys(data.users);
-                        db.ref('users/' + userKey + '/users/' + keys[0] + '/' + key).remove();
-                    } else {
-                        db.ref('users/' + userKey + '/' + key).remove();
-                    }
-                } catch(e) {
-                    db.ref('users/' + userKey + '/' + key).remove();
-                }
-            });
+            db.ref('users/' + userKey + '/' + key).remove(); 
         }
     }
     
