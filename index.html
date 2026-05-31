@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>My Wallet - Safe Sync</title>
+    <title>My Wallet - Smart Debug</title>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -131,7 +131,7 @@
                 </form>
             </div>
 
-            <h3 class="section-title">🕒 ประวัติรายการทั้งหมด (เรียงตามข้อมูลล่าสุด)</h3>
+            <h3 class="section-title">🕒 ประวัติรายการทั้งหมด</h3>
             <div id="list"></div>
             
             <button onclick="logout()" style="width:100%; background:none; border:none; color:#999; text-decoration:underline; margin:30px 0; cursor:pointer;">ออกจากระบบ</button>
@@ -140,7 +140,6 @@
 </div>
 
 <script>
-    // --- Config Firebase ---
     const firebaseConfig = {
         apiKey: "AIzaSyBATLcMZbMuQmnIlG0edT0EPs4FCSWEets",
         authDomain: "mymoney-c730b.firebaseapp.com",
@@ -161,7 +160,6 @@
 
     function formatMoney(num) { return Number(num).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-    // ดักจับปุ่ม Enter หน้าจอล็อกอิน
     document.addEventListener('DOMContentLoaded', () => {
         const passInput = document.getElementById('user-pass');
         if(passInput) {
@@ -187,11 +185,10 @@
         document.getElementById('app-content').style.display = 'flex';
         
         setupDefaultDate();
-        initAppListeners(); // ลงทะเบียนฟอร์มหลังจากสกรีนแอปเปิดชัวร์ๆ
+        initAppListeners(); 
         loadData();
     }
     
-    // 🛠️ แก้ไขจุดตายของปุ่ม: นำ Event Listener มาผูกในนี้เพื่อป้องกันปุ่มบันทึกค้าง/กดไม่ติด
     function initAppListeners() {
         const formNormal = document.getElementById('form-normal');
         formNormal.onsubmit = (e) => {
@@ -203,10 +200,17 @@
                 amount: document.getElementById('type').value === 'expense' ? -Math.abs(amt) : Math.abs(amt),
                 date: document.getElementById('date-normal').value
             };
-            db.ref('users/' + userKey).push(newData);
-            document.getElementById('text').value = '';
-            document.getElementById('amount').value = '';
-            setupDefaultDate();
+            
+            // 🚨 เพิ่มระบบเช็ค Error ตอนบันทึกข้อมูล
+            db.ref('users/' + userKey).push(newData, (error) => {
+                if (error) {
+                    alert("🚨 บันทึกไม่สำเร็จ!\nสาเหตุ: " + error.message + "\n\nอาจจะลืมแก้ กฎ (Rules) ใน Firebase ให้เป็น true ครับ");
+                } else {
+                    document.getElementById('text').value = '';
+                    document.getElementById('amount').value = '';
+                    setupDefaultDate();
+                }
+            });
         };
 
         const formTransfer = document.getElementById('form-transfer');
@@ -228,9 +232,10 @@
         };
     }
     
-    // 🛠️ แก้ไขระบบอ่านข้อมูล: ไม่สนเงื่อนไขวันที่ใดๆ ทั้งสิ้น ดึงคีย์ตรงๆ จากกล่อง 1003 ปลอดภัย 100%
     function loadData() {
         if(!userKey) return;
+        
+        // 🚨 เพิ่มระบบดักจับ Error กรณีดึงข้อมูลไม่ได้เนื่องจากฐานข้อมูลโดนล็อก
         db.ref('users/' + userKey).on('value', (snapshot) => {
             const data = snapshot.val();
             transactions = [];
@@ -239,7 +244,6 @@
                 Object.keys(data).forEach(key => {
                     const item = data[key];
                     if (item && typeof item === 'object') {
-                        // ปล่อยผ่านทุกค่าวันที่ ไม่ยอมให้ระบบล่มเพราะฟอร์แมตวันที่ผิดเพี้ยน
                         transactions.push({
                             fbKey: key,
                             account: item.account || 'cash',
@@ -251,6 +255,9 @@
                 });
             }
             renderUI();
+        }, (error) => {
+            // แจ้งเตือนเด้งขึ้นหน้าจอทันทีถ้าติดเรื่อง Permission
+            alert("🚨 ไม่สามารถดึงข้อมูลได้!\nสาเหตุ: " + error.message + "\n\n(เช็คการตั้งค่า Rules > .read: true ในเว็บ Firebase ด่วนเลยครับ)");
         });
     }
 
@@ -276,7 +283,6 @@
         document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
         document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
 
-        // แสดงรายการจากล่างขึ้นบน (ข้อมูลใหม่ล่าสุดอยู่บนสุด)
         const displayList = [...transactions].reverse();
         
         displayList.forEach(t => {
@@ -286,7 +292,7 @@
             card.innerHTML = `
                 <div>
                     <strong>${t.text}</strong><br>
-                    <small style="color:#888">วันที่บันทึก: ${t.date}</small><br>
+                    <small style="color:#888">${t.date}</small><br>
                     <span class="acc-tag" style="background:${accColors[t.account] || '#7F8C8D'}">${accNames[t.account] || 'เงินสด'}</span>
                 </div>
                 <div style="text-align:right; display:flex; align-items:center; gap:10px;">
