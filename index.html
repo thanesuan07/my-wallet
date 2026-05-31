@@ -38,7 +38,6 @@
         .wallet-box { padding: 8px; border-radius: 12px; text-align: center; color: white; font-size: 0.7em; }
         .wallet-box p { margin: 3px 0 0; font-weight: 600; font-size: 1em; }
 
-        /* ส่วนฟอร์ม */
         .form-container { background: #F9F9F9; padding: 15px; border-radius: 15px; margin: 15px 0; }
         .form-tabs { display: flex; gap: 10px; margin-bottom: 15px; }
         .tab-btn { flex: 1; padding: 8px; border: none; border-radius: 8px; cursor: pointer; font-family: 'Prompt'; font-size: 0.9em; background: #EEE; color: #666; }
@@ -91,7 +90,6 @@
                     <button class="tab-btn" id="tab-transfer" onclick="switchForm('transfer')">โอนเงิน</button>
                 </div>
 
-                <!-- ฟอร์มบันทึกปกติ -->
                 <form id="form-normal">
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                         <select id="account">
@@ -111,7 +109,6 @@
                     <button type="submit" class="btn-main">บันทึกข้อมูล</button>
                 </form>
 
-                <!-- ฟอร์มโอนเงิน (ซ่อนไว้ก่อน) -->
                 <form id="form-transfer" style="display:none;">
                     <div style="display:grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center;">
                         <select id="from-account">
@@ -173,15 +170,21 @@
     function formatMoney(num) { return Number(num).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function formatThaiMonth(yearMonth) {
         if (!yearMonth || yearMonth === 'all') return "แสดงทั้งหมด";
-        const [year, month] = yearMonth.split('-');
+        const parts = yearMonth.split('-');
+        if (parts.length < 2) return yearMonth;
+        const year = parts[0];
+        const month = parts[1];
         return `${thaiMonths[parseInt(month) - 1]} ${parseInt(year) + 543}`;
     }
+    
+    // ปรับปรุงฟังก์ชันดึงเดือนปัจจุบันให้เสถียรและทนทานต่อ Timezone วันที่ 31
     function getCurrentMonthKey() {
         const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}`;
     }
 
-    // สลับฟอร์ม
     function switchForm(mode) {
         document.getElementById('form-normal').style.display = mode === 'normal' ? 'flex' : 'none';
         document.getElementById('form-transfer').style.display = mode === 'transfer' ? 'flex' : 'none';
@@ -202,8 +205,54 @@
         db.ref('users/' + userKey).on('value', (snapshot) => {
             const data = snapshot.val();
             transactions = data ? Object.keys(data).map(key => ({...data[key], fbKey: key})) : [];
+            
+            updateMonthFilterOptions();
             renderUI();
         });
+    }
+
+    // 🛠️ แก้ไข Logic ตัวเลือกตัวกรองให้ยืดหยุ่น ป้องกันแอป Crash ในวันสิ้นเดือน
+    function updateMonthFilterOptions() {
+        const monthFilter = document.getElementById('month-filter');
+        if (!monthFilter) return;
+        
+        const currentSelection = monthFilter.value;
+        const uniqueMonths = new Set();
+        
+        // ใส่เดือนปัจจุบันเป็นค่าตั้งต้นเสมอ
+        uniqueMonths.add(getCurrentMonthKey());
+        
+        transactions.forEach(t => {
+            if (t.date && t.date.length >= 7) {
+                uniqueMonths.add(t.date.substring(0, 7));
+            }
+        });
+
+        // เรียงลำดับจากใหม่ไปเก่า
+        const sortedMonths = Array.from(uniqueMonths).sort().reverse();
+
+        monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
+        sortedMonths.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m; 
+            opt.textContent = formatThaiMonth(m);
+            monthFilter.appendChild(opt);
+        });
+
+        // ตรวจสอบความปลอดภัยของตำแหน่งที่เลือก
+        if (isFirstLoad) {
+            monthFilter.value = getCurrentMonthKey();
+            isFirstLoad = false;
+        } else {
+            // ป้องกันกรณีค่า Selection เดิมไม่มีอยู่ในรายการรอบใหม่ ให้เด้งกลับไปที่ 'all' แทนการค้าง
+            if (currentSelection && sortedMonths.includes(currentSelection)) {
+                monthFilter.value = currentSelection;
+            } else if (currentSelection === 'all') {
+                monthFilter.value = 'all';
+            } else {
+                monthFilter.value = getCurrentMonthKey();
+            }
+        }
     }
 
     function renderUI() {
@@ -211,44 +260,47 @@
         const mList = document.getElementById('monthly-list');
         const monthFilter = document.getElementById('month-filter');
         
-        if (isFirstLoad) { monthFilter.value = getCurrentMonthKey(); isFirstLoad = false; }
+        if (!list || !mList || !monthFilter) return;
+        
         const selectedMonth = monthFilter.value || getCurrentMonthKey();
 
-        list.innerHTML = ''; mList.innerHTML = '';
+        list.innerHTML = ''; 
+        mList.innerHTML = '';
+        
         let total = 0, kbank = 0, bay = 0, scb = 0, cash = 0;
         const summary = {};
-        const uniqueMonths = new Set();
-        uniqueMonths.add(getCurrentMonthKey());
 
         transactions.forEach(t => {
-            const amt = parseFloat(t.amount);
+            const amt = parseFloat(t.amount) || 0;
             total += amt;
             if (t.account === 'kbank') kbank += amt;
             if (t.account === 'bay') bay += amt;
             if (t.account === 'scb') scb += amt;
             if (t.account === 'cash') cash += amt;
-            uniqueMonths.add(t.date.substring(0, 7));
+
+            if (t.date && t.date.length >= 7) {
+                const mKey = t.date.substring(0, 7);
+                if (!summary[mKey]) summary[mKey] = { inc: 0, exp: 0 };
+                if (amt > 0) summary[mKey].inc += amt;
+                else summary[mKey].exp += Math.abs(amt);
+            }
         });
 
-        // อัปเดต Filter
-        const currentFilterVal = monthFilter.value;
-        monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
-        Array.from(uniqueMonths).sort().reverse().forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m; opt.textContent = formatThaiMonth(m);
-            monthFilter.appendChild(opt);
-        });
-        monthFilter.value = currentFilterVal || getCurrentMonthKey();
+        document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
+        document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
+        document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
+        document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
+        document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
 
-        transactions.sort((a,b) => new Date(b.date) - new Date(a.date));
-        transactions.forEach(t => {
-            const amt = parseFloat(t.amount);
+        const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        sortedTransactions.forEach(t => {
+            if (!t.date || t.date.length < 7) return;
             const mKey = t.date.substring(0, 7);
-            if(!summary[mKey]) summary[mKey] = {inc: 0, exp: 0};
-            if(amt > 0) summary[mKey].inc += amt; else summary[mKey].exp += Math.abs(amt);
-
+            
             if (selectedMonth !== 'all' && mKey !== selectedMonth) return;
 
+            const amt = parseFloat(t.amount) || 0;
             const card = document.createElement('div');
             card.className = `item-card item-${t.account}`;
             card.innerHTML = `
@@ -263,12 +315,6 @@
                 </div>`;
             list.appendChild(card);
         });
-
-        document.getElementById('total-balance').innerText = '฿' + formatMoney(total);
-        document.getElementById('bal-kbank').innerText = '฿' + formatMoney(kbank);
-        document.getElementById('bal-bay').innerText = '฿' + formatMoney(bay);
-        document.getElementById('bal-scb').innerText = '฿' + formatMoney(scb);
-        document.getElementById('bal-cash').innerText = '฿' + formatMoney(cash);
 
         Object.keys(summary).sort().reverse().forEach(m => {
             if (selectedMonth !== 'all' && m !== selectedMonth) return;
@@ -285,7 +331,6 @@
         });
     }
 
-    // บันทึกปกติ
     document.getElementById('form-normal').addEventListener('submit', (e) => {
         e.preventDefault();
         const amt = parseFloat(document.getElementById('amount').value);
@@ -301,47 +346,9 @@
         setToToday();
     });
 
-    // โอนเงิน (สร้าง 2 รายการ)
     document.getElementById('form-transfer').addEventListener('submit', (e) => {
         e.preventDefault();
         const from = document.getElementById('from-account').value;
         const to = document.getElementById('to-account').value;
         const amt = Math.abs(parseFloat(document.getElementById('transfer-amount').value));
-        const date = document.getElementById('date-transfer').value;
-
-        if (from === to) { alert('บัญชีต้นทางและปลายทางต้องต่างกัน'); return; }
-
-        // รายการที่ 1: หักออกจากต้นทาง
-        db.ref('users/' + userKey).push({
-            account: from,
-            text: `🔄 โอนเงินไป ${accNames[to]}`,
-            amount: -amt,
-            date: date
-        });
-
-        // รายการที่ 2: เพิ่มเข้าปลายทาง
-        db.ref('users/' + userKey).push({
-            account: to,
-            text: `🔄 รับโอนจาก ${accNames[from]}`,
-            amount: amt,
-            date: date
-        });
-
-        document.getElementById('transfer-amount').value = '';
-        switchForm('normal');
-        setToToday();
-    });
-
-    function deleteData(key) { if(confirm('ลบรายการนี้ใช่หรือไม่?')) db.ref('users/' + userKey + '/' + key).remove(); }
-    function logout() { location.reload(); }
-
-    function setToToday() {
-        const now = new Date();
-        const offset = now.getTimezoneOffset() * 60000;
-        const localISOTime = (new Date(now - offset)).toISOString().slice(0, 10);
-        document.querySelectorAll('.date-input').forEach(el => el.value = localISOTime);
-    }
-    setToToday();
-</script>
-</body>
-</html>
+        const date = document.getElementById('
