@@ -168,22 +168,31 @@
     const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
     function formatMoney(num) { return Number(num).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    
     function formatThaiMonth(yearMonth) {
-        if (!yearMonth || yearMonth === 'all') return "แสดงทั้งหมด";
-        const parts = yearMonth.split('-');
-        if (parts.length < 2) return yearMonth;
-        const year = parts[0];
-        const month = parts[1];
-        return `${thaiMonths[parseInt(month) - 1]} ${parseInt(year) + 543}`;
+        try {
+            if (!yearMonth || yearMonth === 'all') return "แสดงทั้งหมด";
+            const parts = yearMonth.split('-');
+            if (parts.length < 2) return yearMonth;
+            const year = parts[0];
+            const month = parts[1];
+            return `${thaiMonths[parseInt(month) - 1]} ${parseInt(year) + 543}`;
+        } catch(e) {
+            return yearMonth;
+        }
     }
     
-    // ปรับปรุงฟังก์ชันดึงเดือนปัจจุบันให้เสถียรและทนทานต่อ Timezone วันที่ 31
     function getCurrentMonthKey() {
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         return `${year}-${month}`;
     }
+
+    // ฟังก์ชันผูกปุ่มกด Enter ในช่องรหัสผ่านเพื่อให้กดล็อกอินได้ง่ายขึ้น
+    document.getElementById('user-pass').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') { login(); }
+    });
 
     function switchForm(mode) {
         document.getElementById('form-normal').style.display = mode === 'normal' ? 'flex' : 'none';
@@ -202,6 +211,7 @@
     }
     
     function loadData() {
+        if(!userKey) return;
         db.ref('users/' + userKey).on('value', (snapshot) => {
             const data = snapshot.val();
             transactions = data ? Object.keys(data).map(key => ({...data[key], fbKey: key})) : [];
@@ -211,7 +221,6 @@
         });
     }
 
-    // 🛠️ แก้ไข Logic ตัวเลือกตัวกรองให้ยืดหยุ่น ป้องกันแอป Crash ในวันสิ้นเดือน
     function updateMonthFilterOptions() {
         const monthFilter = document.getElementById('month-filter');
         if (!monthFilter) return;
@@ -219,7 +228,6 @@
         const currentSelection = monthFilter.value;
         const uniqueMonths = new Set();
         
-        // ใส่เดือนปัจจุบันเป็นค่าตั้งต้นเสมอ
         uniqueMonths.add(getCurrentMonthKey());
         
         transactions.forEach(t => {
@@ -228,7 +236,6 @@
             }
         });
 
-        // เรียงลำดับจากใหม่ไปเก่า
         const sortedMonths = Array.from(uniqueMonths).sort().reverse();
 
         monthFilter.innerHTML = '<option value="all">แสดงทั้งหมด</option>';
@@ -239,12 +246,10 @@
             monthFilter.appendChild(opt);
         });
 
-        // ตรวจสอบความปลอดภัยของตำแหน่งที่เลือก
         if (isFirstLoad) {
             monthFilter.value = getCurrentMonthKey();
             isFirstLoad = false;
         } else {
-            // ป้องกันกรณีค่า Selection เดิมไม่มีอยู่ในรายการรอบใหม่ ให้เด้งกลับไปที่ 'all' แทนการค้าง
             if (currentSelection && sortedMonths.includes(currentSelection)) {
                 monthFilter.value = currentSelection;
             } else if (currentSelection === 'all') {
@@ -351,4 +356,44 @@
         const from = document.getElementById('from-account').value;
         const to = document.getElementById('to-account').value;
         const amt = Math.abs(parseFloat(document.getElementById('transfer-amount').value));
-        const date = document.getElementById('
+        const date = document.getElementById('date-transfer').value;
+
+        if (from === to) { alert('บัญชีต้นทางและปลายทางต้องต่างกัน'); return; }
+
+        db.ref('users/' + userKey).push({
+            account: from,
+            text: `🔄 โอนเงินไป ${accNames[to]}`,
+            amount: -amt,
+            date: date
+        });
+
+        db.ref('users/' + userKey).push({
+            account: to,
+            text: `🔄 รับโอนจาก ${accNames[from]}`,
+            amount: amt,
+            date: date
+        });
+
+        document.getElementById('transfer-amount').value = '';
+        switchForm('normal');
+        setToToday();
+    });
+
+    function deleteData(key) { 
+        if(confirm('ลบรายการนี้ใช่หรือไม่?\n(คำแนะนำ: หากเป็นรายการโอนเงิน ต้องตามลบอีกขาหนึ่งด้วยตนเอง ยอดเงินจึงจะกลับมาเท่าเดิมครับ)')) {
+            db.ref('users/' + userKey + '/' + key).remove(); 
+        }
+    }
+    
+    function logout() { location.reload(); }
+
+    function setToToday() {
+        const now = new Date();
+        const offset = now.getTimezoneOffset() * 60000;
+        const localISOTime = (new Date(now - offset)).toISOString().slice(0, 10);
+        document.querySelectorAll('.date-input').forEach(el => el.value = localISOTime);
+    }
+    setToToday();
+</script>
+</body>
+</html>
